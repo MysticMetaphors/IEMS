@@ -43,16 +43,20 @@ export default function Navigation() {
   const router = useRouter();
 
   return (
-    <View className="bg-white relative pt-[15px] pb-[25px] px-[41px] flex flex-row items-center justify-center gap-[14px] border-t border-[#DFDFDF]">
-      <View className="absolute bottom-full right-0 flex-row items-end z-10 translate-y-[1px] ">
+    <View className="bg-white relative pt-[15px] pb-[50px] px-[41px] flex flex-row items-center justify-center gap-[14px] border-t border-[#DFDFDF]">
+      <View className="absolute bottom-[118px] right-0 flex-row items-end z-10 translate-y-[1px] ">
         <View className="relative h-[75px] w-[200px] rounded-tl-[35px] pl-10 border-l border-t border-[#DFDFDF] bg-white">
           <ConcaveBorderAskSomething
             height={28}
             width={41}
-            className="absolute left-[-39px] bottom-[-0.5px]"
+            style={{
+              position: "absolute",
+              left: -40,
+              bottom: -1,
+            }}
           />
           <Pressable
-            // onPress={() => router.push("/ask")}
+            onPress={() => router.push("/assistant")}
             className="absolute right-[16px] top-[14px] flex h-[48px] w-[170px] flex-row items-center gap-[10px] rounded-full border border-[#DFDFDF] bg-card px-[17px]"
           >
             <Sparkle height={22} width={22} fill="#666666" />
@@ -63,7 +67,7 @@ export default function Navigation() {
         </View>
       </View>
 
-      <View className="absolute bottom-0 left-0 w-full bg-border h-[60%]"/>
+      <View className="absolute bottom-0 left-0 w-[100vw] bg-border h-[80px]" />
 
       {menus.map((menu) => {
         const Icon = menu.icon;

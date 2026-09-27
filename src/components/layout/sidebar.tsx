@@ -8,18 +8,10 @@ import Scheduling from "@/assets/icons/sidebar/scheduling.svg";
 import Settings from "@/assets/icons/sidebar/settings.svg";
 import Sparkle from "@/assets/icons/sidebar/sparkle.svg";
 import Students from "@/assets/icons/sidebar/students.svg";
-import { useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Dimensions,
-  Image,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { Animated, Dimensions, Image, Pressable, ScrollView, Text, View } from "react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH - 8, 335);
@@ -58,8 +50,8 @@ const menus = [
 
 export default function Sidebar({ visible, onClose }: SidebarProps) {
   const [mounted, setMounted] = useState(visible);
-  const [activeMenu, setActiveMenu] = useState("Overview");
   const router = useRouter();
+  const pathname = usePathname();
 
   const translateX = useRef(
     new Animated.Value(-DRAWER_WIDTH)
@@ -108,7 +100,7 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
         }}
         className="absolute bottom-0 left-0 top-0"
       >
-        <View className="h-full space-y-[10px] border-r border-border bg-white px-[23px] py-[26px]">
+        <View className="h-full flex gap-[10px] border-r border-border bg-white px-[23px] py-[50px]">
 
           {/* Logo */}
           <View className="relative w-full">
@@ -148,13 +140,13 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
           </View>
 
           {/* Ask */}
-          <View className="flex w-full flex-row items-center gap-[10px] rounded-full border border-border bg-card px-[17px] py-[15px]">
+          <Pressable onPress={() => router.push("/assistant")} className="flex w-full flex-row items-center gap-[10px] rounded-full border border-border bg-card px-[17px] py-[15px]">
             <Sparkle height={24} width={24} />
 
             <Text className="font-inter text-[12px] font-semibold text-muted">
               Ask something
             </Text>
-          </View>
+          </Pressable>
 
           {/* Menu label */}
           <View className="flex flex-row items-center gap-[10px] overflow-hidden">
@@ -173,20 +165,20 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
           >
             {menus.map((menu) => {
               const Icon = menu.icon;
-              const active = activeMenu === menu.label;
               const lowercaseLabel = menu.label.toLowerCase();
+
+              const targetPath =
+                lowercaseLabel === "overview"
+                  ? "/"
+                  : `/${lowercaseLabel}`;
+
+              const active = pathname === targetPath;
 
               return (
                 <Pressable
                   key={menu.label}
                   onPress={() => {
                     onClose();
-                    setActiveMenu(menu.label);
-                    const targetPath =
-                      lowercaseLabel === "overview" || lowercaseLabel === "index"
-                        ? "/"
-                        : `/${lowercaseLabel}`;
-
                     router.push(targetPath as any);
                   }}
                   className="w-full"
@@ -197,8 +189,8 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
                     return (
                       <View
                         className={`flex w-full flex-row items-center gap-[4px] rounded-[12px] border p-[17px] ${highlighted
-                          ? "border-black bg-black"
-                          : "border-border bg-card"
+                            ? "border-black bg-black"
+                            : "border-border bg-card"
                           }`}
                       >
                         <Icon

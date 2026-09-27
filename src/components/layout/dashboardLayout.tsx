@@ -8,7 +8,7 @@ export default function DashboardLayout({ children }: { children: ReactNode; }) 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <View className="flex-1 bg-white pt-[26px] px-[23px]">
+    <View className="flex-1 bg-white pt-[50px] px-[23px]">
       <Topbar onMenuPress={() => setSidebarOpen(true)} />
 
       {children}

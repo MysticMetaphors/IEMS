@@ -12,6 +12,7 @@ import {
 
 import { useFonts } from "expo-font";
 
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 
 export default function RootLayout() {
@@ -28,5 +29,9 @@ export default function RootLayout() {
     return null;
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <SafeAreaProvider>
+      <Stack screenOptions={{ headerShown: false, animation: "none", }} />
+    </SafeAreaProvider>
+  )
 }

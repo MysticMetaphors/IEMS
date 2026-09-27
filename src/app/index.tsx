@@ -6,7 +6,7 @@ export default function Index() {
     <DashboardLayout>
       <View className="flex-1 items-center justify-center">
         <Text className="text-2xl font-bold text-black">
-          Dashboard
+          Overview
         </Text>
       </View>
     </DashboardLayout>

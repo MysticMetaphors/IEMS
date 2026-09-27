@@ -4,7 +4,7 @@ import { Stack } from "expo-router";
 export default function DashboardLayoutRoute() {
   return (
     <DashboardLayout>
-      <Stack screenOptions={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: false, animation: "none", }} />
     </DashboardLayout>
   );
 }
