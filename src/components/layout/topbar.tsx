@@ -25,9 +25,9 @@ export default function Topbar({ onMenuPress }: { onMenuPress: () => void}) {
             height={24}
             width={24}
           />
-          <Text className="text-muted font-inter-semibold">Notifications</Text>
+          <Text className="text-muted font-inter-semibold text-[12px]">Notifications</Text>
         </View>
-        <View className="bg-border rounded-full w-[2px] h-[30px]"/>
+        <View className="bg-border/20 rounded-full w-[2px] h-[30px]"/>
         <Image
           source={require("@/assets/images/placeholder.png")}
           style={{

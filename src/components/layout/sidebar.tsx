@@ -10,8 +10,17 @@ import Sparkle from "@/assets/icons/sidebar/sparkle.svg";
 import Students from "@/assets/icons/sidebar/students.svg";
 import { usePathname, useRouter } from "expo-router";
 
-import React, { useEffect, useRef, useState } from "react";
-import { Animated, Dimensions, Image, Pressable, ScrollView, Text, View } from "react-native";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Animated,
+  Dimensions,
+  Image,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import type { SvgProps } from "react-native-svg";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = Math.min(SCREEN_WIDTH - 8, 335);
@@ -21,41 +30,73 @@ type SidebarProps = {
   onClose: () => void;
 };
 
-const menus = [
-  {
-    label: "Overview",
-    icon: Overview,
-  },
-  {
-    label: "Scheduling",
-    icon: Scheduling,
-  },
-  {
-    label: "Classes",
-    icon: Classes,
-  },
-  {
-    label: "Students",
-    icon: Students,
-  },
-  {
-    label: "Attendance",
-    icon: Attendance,
-  },
-  {
-    label: "Settings",
-    icon: Settings,
-  },
+type MenuItem = {
+  label: string;
+  route: string;
+  icon: React.FC<SvgProps>;
+};
+
+const menus: MenuItem[] = [
+  { label: "Overview", route: "/", icon: Overview },
+  { label: "Scheduling", route: "/scheduling", icon: Scheduling },
+  { label: "Classes", route: "/classes", icon: Classes },
+  { label: "Students", route: "/students", icon: Students },
+  { label: "Attendance", route: "/attendance", icon: Attendance },
+  { label: "Settings", route: "/settings", icon: Settings },
 ];
 
-export default function Sidebar({ visible, onClose }: SidebarProps) {
+/**
+ * Owns its own usePathname() subscription, so navigating only
+ * re-renders the one or two rows whose highlighted state actually
+ * flips - not the whole drawer (avatar, "Ask something" pill, scroll
+ * container, footer buttons, etc).
+ */
+const SidebarMenuItem = memo(function SidebarMenuItem({
+  label,
+  route,
+  icon: Icon,
+  onNavigate,
+}: MenuItem & { onNavigate: (route: string) => void }) {
+  const pathname = usePathname();
+  const active = pathname === route;
+
+  const handlePress = useCallback(() => onNavigate(route), [onNavigate, route]);
+
+  return (
+    <Pressable onPress={handlePress} className="w-full">
+      {({ hovered }) => {
+        const highlighted = active || hovered;
+
+        return (
+          <View
+            className={`flex w-full flex-row items-center gap-[4px] rounded-[12px] border p-[17px] ${
+              highlighted ? "border-black bg-black" : "border-border bg-card"
+            }`}
+          >
+            <Icon
+              height={19}
+              width={19}
+              style={{ color: highlighted ? "#FFFFFF" : "#8E8E8E" }}
+            />
+            <Text
+              className={`font-inter-semibold text-[12px] ${
+                highlighted ? "text-white" : "text-muted"
+              }`}
+            >
+              {label}
+            </Text>
+          </View>
+        );
+      }}
+    </Pressable>
+  );
+});
+
+function Sidebar({ visible, onClose }: SidebarProps) {
   const [mounted, setMounted] = useState(visible);
   const router = useRouter();
-  const pathname = usePathname();
 
-  const translateX = useRef(
-    new Animated.Value(-DRAWER_WIDTH)
-  ).current;
+  const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
 
   useEffect(() => {
     if (visible) {
@@ -81,17 +122,28 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
     }
   }, [visible, translateX]);
 
+  const handleNavigate = useCallback(
+    (route: string) => {
+      onClose();
+      router.replace(route as any);
+    },
+    [onClose, router]
+  );
+
+  const handleAskSomething = useCallback(() => {
+    onClose();
+    router.replace("/assistant");
+  }, [onClose, router]);
+
+  // Bail out before touching the menu list at all while the drawer is
+  // closed/animating away - no leaf items mount, so there's nothing to
+  // re-render when the route changes off-screen.
   if (!mounted) {
     return null;
   }
 
   return (
     <View className="absolute bottom-0 left-0 right-0 top-0 z-50">
-      {/* <Pressable
-        className="absolute bottom-0 left-0 right-0 top-0"
-        onPress={onClose}
-      /> */}
-
       <Animated.View
         style={{
           width: "100%",
@@ -101,7 +153,6 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
         className="absolute bottom-0 left-0 top-0"
       >
         <View className="h-full flex gap-[10px] border-r border-border bg-white px-[23px] py-[50px]">
-
           {/* Logo */}
           <View className="relative w-full">
             <Text className="w-full text-center font-oleo text-[32px]">
@@ -140,7 +191,10 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
           </View>
 
           {/* Ask */}
-          <Pressable onPress={() => router.push("/assistant")} className="flex w-full flex-row items-center gap-[10px] rounded-full border border-border bg-card px-[17px] py-[15px]">
+          <Pressable
+            onPress={handleAskSomething}
+            className="flex w-full flex-row items-center gap-[10px] rounded-full border border-border bg-card px-[17px] py-[15px]"
+          >
             <Sparkle height={24} width={24} />
 
             <Text className="font-inter text-[12px] font-semibold text-muted">
@@ -163,54 +217,13 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
             showsVerticalScrollIndicator={false}
             contentContainerClassName="gap-[10px] pb-[10px]"
           >
-            {menus.map((menu) => {
-              const Icon = menu.icon;
-              const lowercaseLabel = menu.label.toLowerCase();
-
-              const targetPath =
-                lowercaseLabel === "overview"
-                  ? "/"
-                  : `/${lowercaseLabel}`;
-
-              const active = pathname === targetPath;
-
-              return (
-                <Pressable
-                  key={menu.label}
-                  onPress={() => {
-                    onClose();
-                    router.push(targetPath as any);
-                  }}
-                  className="w-full"
-                >
-                  {({ hovered }) => {
-                    const highlighted = active || hovered;
-
-                    return (
-                      <View
-                        className={`flex w-full flex-row items-center gap-[4px] rounded-[12px] border p-[17px] ${highlighted
-                            ? "border-black bg-black"
-                            : "border-border bg-card"
-                          }`}
-                      >
-                        <Icon
-                          height={19}
-                          width={19}
-                          fill={highlighted ? "#FFFFFF" : "#8E8E8E"}
-                        />
-
-                        <Text
-                          className={`font-inter-semibold text-[12px] ${highlighted ? "text-white" : "text-muted"
-                            }`}
-                        >
-                          {menu.label}
-                        </Text>
-                      </View>
-                    );
-                  }}
-                </Pressable>
-              );
-            })}
+            {menus.map((menu) => (
+              <SidebarMenuItem
+                key={menu.route}
+                {...menu}
+                onNavigate={handleNavigate}
+              />
+            ))}
           </ScrollView>
 
           {/* Fixed bottom actions */}
@@ -219,10 +232,10 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
               <Information
                 height={19}
                 width={19}
-                fill="#8E8E8E"
+                style={{ color: "#8E8E8E" }}
               />
 
-              <Text className="font-inter-semibold text-[12px] text-foreground">
+              <Text className="font-inter-semibold text-[12px] text-muted">
                 Help & Information
               </Text>
             </Pressable>
@@ -231,10 +244,10 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
               <Logout
                 height={19}
                 width={19}
-                fill="#8E8E8E"
+                style={{ color: "#8E8E8E" }}
               />
 
-              <Text className="font-inter-semibold text-[12px] text-foreground">
+              <Text className="font-inter-semibold text-[12px] text-muted">
                 Logout
               </Text>
             </Pressable>
@@ -244,3 +257,5 @@ export default function Sidebar({ visible, onClose }: SidebarProps) {
     </View>
   );
 }
+
+export default memo(Sidebar);
