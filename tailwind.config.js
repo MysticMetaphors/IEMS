@@ -14,6 +14,7 @@ module.exports = {
         oleo: ["OleoScriptSwashCaps"],
       },
       colors: {
+        "primary": "#B08050",
         "border": "#DFDFDF",
         "card": "#F1F1F1",
         "foreground": "#000000",

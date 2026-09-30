@@ -13,7 +13,7 @@ export default function SearchInput({ value, onChangeText, className }: SearchIn
       <Search height={17} width={17} />
 
       <TextInput
-        className="font-inter-semibold text-[12px]"
+        className="font-inter-semibold text-[12px] w-[100%]"
         placeholder="Search..."
         value={value}
         onChangeText={onChangeText}
