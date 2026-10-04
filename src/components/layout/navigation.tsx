@@ -19,7 +19,7 @@ type MenuItem = {
 };
 
 const menus: MenuItem[] = [
-  { label: "Overview", route: "/", icon: Overview },
+  { label: "Overview", route: "/overview", icon: Overview },
   { label: "Scheduling", route: "/scheduling", icon: Scheduling },
   { label: "Classes", route: "/classes", icon: Classes },
   { label: "Students", route: "/students", icon: Students },

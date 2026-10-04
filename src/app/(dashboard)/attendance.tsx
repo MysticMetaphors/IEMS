@@ -1,6 +1,6 @@
 
 import Arrow from "@/assets/icons/arrow.svg";
-//import Ellipsis from "@/assets/icons/dots-vertical-rounded.svg";
+import Ellipsis from "@/assets/icons/dots-vertical-rounded.svg";
 import Filter from "@/assets/icons/filter.svg";
 import Absent from "@/assets/icons/status/absent.svg";
 import Not_Tagged from "@/assets/icons/status/not_tagged.svg";
@@ -203,7 +203,7 @@ export default function Attendance() {
                   </View>
                 </View>
 
-                {/* <Ellipsis height={22} width={22} /> */}
+                <Ellipsis height={22} width={22} />
               </View>
             );
           })
