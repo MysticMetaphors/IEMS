@@ -33,17 +33,31 @@ async function initializeDatabase() {
 
   const currentVersion = row?.version ?? 0;
 
-  if (currentVersion < 1) {
-    await db.withExclusiveTransactionAsync(async (tx) => {
-      await tx.execAsync(DATABASE_SCHEMA);
+  // if (currentVersion < 1) {
+  //   await db.withExclusiveTransactionAsync(async (tx) => {
+  //     await tx.execAsync(DATABASE_SCHEMA);
 
-      await tx.runAsync(
+  //     await tx.runAsync(
+  //       'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
+  //       1,
+  //       new Date().toISOString()
+  //     );
+  //   });
+  // }
+
+  // web browser does not support exclusive transactions, so we use a regular transaction instead
+  if (currentVersion < 1) {
+    await db.withTransactionAsync(async () => {
+      await db.execAsync(DATABASE_SCHEMA);
+
+      await db.runAsync(
         'INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)',
         1,
         new Date().toISOString()
       );
     });
   }
+
 
   return db;
 }
