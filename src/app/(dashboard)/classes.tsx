@@ -149,9 +149,8 @@ export default function Classes() {
           className="flex-1"
         />
         <Button LeftIcon={Filter} />
-        
       </View>
-      <Button label="Schedule new Class" classname="justify-center w-[100%]"/>
+      <Button label="New Class" classname="justify-center w-[100%]"/>
       <View className="flex flex-row items-center justify-between h-fit w-full">
         <Text className="font-inter-semibold text-[12px]">Classes</Text>
         <Text className="font-inter-semibold text-[12px]">Actions</Text>

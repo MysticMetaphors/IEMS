@@ -1,53 +1,64 @@
 import Arrow from "@/assets/icons/arrow.svg";
 import Ellipsis from "@/assets/icons/dots-vertical-rounded.svg";
-import Unknown from "@/assets/icons/status/unknown.svg";
 import AddStudent from "@/assets/icons/user-add-fill.svg";
-import AddStudentModal, { generateStudentId } from "@/components/add-students-modal";
 import Button from "@/components/button";
 import SearchInput from "@/components/search-input";
-import { useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import Drawer from "@/components/ui/drawer";
+import { ResetDatabaseButton } from "@/db/refresh-database/button";
+import { createStudent, getStudents } from "@/db/student/student";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 const PAGE_SIZE = 10;
 
-type Student = {
-  name: string;
-  custom_id: string;
-  contact?: string;
-};
-
-const initialStudents: Student[] = [
-  { name: "Jonathan Freeman", custom_id: "STU_GJWM2026100" },
-  { name: "Sophia Bennett", custom_id: "STU_KRZT2026101" },
-  { name: "Ethan Carter", custom_id: "STU_PLNX2026102" },
-  { name: "Olivia Mitchell", custom_id: "STU_WQHF2026103" },
-  { name: "Liam Anderson", custom_id: "STU_BVKC2026104" },
-  { name: "Emma Richardson", custom_id: "STU_XDJP2026105" },
-  { name: "Noah Thompson", custom_id: "STU_MQRS2026106" },
-  { name: "Ava Williams", custom_id: "STU_HZFK2026107" },
-  { name: "Lucas Morgan", custom_id: "STU_TNWB2026108" },
-  { name: "Mia Parker", custom_id: "STU_CYLG2026109" },
-  { name: "James Cooper", custom_id: "STU_RVQP2026110" },
-  { name: "Charlotte Evans", custom_id: "STU_JKDX2026111" },
-  { name: "Benjamin Scott", custom_id: "STU_FMZT2026112" },
-  { name: "Amelia Turner", custom_id: "STU_QHNR2026113" },
-  { name: "Henry Collins", custom_id: "STU_LWPC2026114" },
-  { name: "Harper Stewart", custom_id: "STU_ZXGM2026115" },
-  { name: "Daniel Brooks", custom_id: "STU_NKQV2026116" },
-  { name: "Evelyn Murphy", custom_id: "STU_DTRH2026117" },
-  { name: "Alexander Reed", custom_id: "STU_YBFS2026118" },
-  { name: "Grace Foster", custom_id: "STU_VJLK2026119" },
-];
+type Student = Awaited<ReturnType<typeof getStudents>>[number];
 
 export default function Students() {
-  const [students, setStudents] = useState<Student[]>(initialStudents);
+  const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [addOpen, setAddOpen] = useState(false);
 
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // Load students through the existing database helper.
+  const loadStudents = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const result = await getStudents();
+      setStudents(result);
+    } catch (err) {
+      console.error("Failed to load students:", err);
+      setError("Unable to load students. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStudents();
+  }, [loadStudents]);
+
+  // Search by name or email.
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return q ? students.filter((s) => s.name.toLowerCase().includes(q)) : students;
+    const query = search.trim().toLowerCase();
+
+    if (!query) return students;
+
+    return students.filter(
+      (student) =>
+        student.name.toLowerCase().includes(query) ||
+        student.email?.toLowerCase().includes(query)
+    );
   }, [search, students]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -55,23 +66,59 @@ export default function Students() {
   const endIndex = startIndex + PAGE_SIZE;
   const paginated = filtered.slice(startIndex, endIndex);
 
-  const handleSearch = (text: string) => {
-    setSearch(text);
+  const handleSearch = (value: string) => {
+    setSearch(value);
     setPage(1);
   };
 
-  const handleAddStudent = ({ name, contact }: { name: string; contact: string }) => {
-    const newStudent: Student = {
-      name,
-      contact,
-      custom_id: generateStudentId(students.length + 1),
-    };
+  const resetForm = () => {
+    setName("");
+    setEmail("");
+    setPhone("");
+    setNotes("");
+    setError("");
+  };
 
-    setStudents((prev) => [...prev, newStudent]);
+  const handleCloseDrawer = () => {
+    if (saving) return;
 
-    // clear the search and jump to the page where the new student lands
-    setSearch("");
-    setPage(Math.ceil((students.length + 1) / PAGE_SIZE));
+    setDrawerOpen(false);
+    resetForm();
+  };
+
+  const handleAddStudent = async () => {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      setError("Please enter the student's name.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+
+      await createStudent({
+        name: trimmedName,
+        email,
+        phone,
+        notes,
+      });
+
+      // Refresh from SQLite so the UI reflects persisted records.
+      const result = await getStudents();
+
+      setStudents(result);
+      setSearch("");
+      setPage(1);
+      setDrawerOpen(false);
+      resetForm();
+    } catch (err) {
+      console.error("Failed to create student:", err);
+      setError("Unable to save the student. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const isFirst = page === 1;
@@ -80,87 +127,249 @@ export default function Students() {
   return (
     <>
       <ScrollView
-        className="flex-1 bg-white "
+        className="flex-1 bg-white"
         showsVerticalScrollIndicator={false}
         showsHorizontalScrollIndicator={false}
         contentContainerClassName="gap-[18px] pb-[200px]"
       >
+        {/* Search and create */}
         <View className="flex flex-row gap-[10px] max-w-full">
-          <SearchInput value={search} onChangeText={handleSearch} className="flex-1" />
-          <Button LeftIcon={AddStudent} label="New Student" onPress={() => setAddOpen(true)} />
+          <SearchInput
+            value={search}
+            onChangeText={handleSearch}
+            className="flex-1"
+          />
+
+          <Button
+            LeftIcon={AddStudent}
+            label="New Student"
+            onPress={() => {
+              setError("");
+              setDrawerOpen(true);
+            }}
+          />
         </View>
 
+        {/* Column headings */}
         <View className="flex flex-row items-center justify-between h-fit w-full">
-          <Text className="font-inter-semibold text-[12px]">Students</Text>
-          <Text className="font-inter-semibold text-[12px]">Actions</Text>
+          <Text className="font-inter-semibold text-[12px]">
+            Students
+          </Text>
+
+          <Text className="font-inter-semibold text-[12px]">
+            Actions
+          </Text>
         </View>
 
+        {/* Student list */}
         <View className="flex gap-[10px]">
-          {paginated.length === 0 ? (
+          {loading ? (
+            <View className="items-center py-6">
+              <ActivityIndicator />
+
+              <Text className="font-inter text-[12px] text-muted mt-2">
+                Loading students...
+              </Text>
+            </View>
+          ) : error && students.length === 0 ? (
+            <View className="items-center gap-3 py-6">
+              <Text className="font-inter text-[12px] text-muted text-center">
+                {error}
+              </Text>
+
+              <Pressable onPress={() => void loadStudents()}>
+                <Text className="font-inter-semibold text-[12px]">
+                  Try again
+                </Text>
+              </Pressable>
+            </View>
+          ) : paginated.length === 0 ? (
             <Text className="font-inter text-[12px] text-muted text-center py-6">
-              No students found
+              {search.trim()
+                ? "No students found"
+                : "No students yet. Add your first student."}
             </Text>
           ) : (
             paginated.map((student) => (
-              <View
-                key={student.custom_id}
-                className="px-[16px] py-[13px] flex flex-row justify-between items-center rounded-[12px] border border-border bg-card"
-              >
-                <View className="flex w-fit flex-row items-center gap-[10px]">
-                  <View className="border border-gray-500 rounded-full">
-                    <Unknown height={26} width={26} style={{ opacity: 0.8 }} />
-                  </View>
-                  <View>
+              <View key={student.id} className="px-[16px] py-[13px] flex flex-row justify-between items-center rounded-[12px] border border-border bg-card" >
+                <View className="flex-1 flex-row items-center gap-[10px] mr-3">
+                  <View className="flex-1">
                     <Text className="font-inter-bold text-[12px] text-foreground">
                       {student.name}
                     </Text>
-                    <Text className="font-inter text-[10px] font-normal text-muted">
-                      ID: {student.custom_id}
+
+                    <Text className="font-inter text-[10px] text-muted">
+                      {student.email || student.phone || "No contact information"} 
                     </Text>
                   </View>
                 </View>
 
-                <Ellipsis height={22} width={22} />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Actions for ${student.name}`}
+                  hitSlop={8}
+                  onPress={() => {
+                    // Add student actions here later.
+                  }}
+                >
+                  <Ellipsis height={22} width={22} />
+                </Pressable>
               </View>
             ))
           )}
         </View>
 
-        <View className="flex flex-row items-center justify-between gap-[10px]">
-          <View className="flex flex-row gap-[10px]">
-            <Pressable
-              disabled={isFirst}
-              onPress={() => setPage((p) => Math.max(1, p - 1))}
-              className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isFirst ? "opacity-40" : ""}`}
-            >
-              <Arrow height={15} width={24} style={{ color: "#A9A9A9" }} />
-            </Pressable>
-            <Pressable
-              disabled={isLast}
-              onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isLast ? "opacity-40" : ""}`}
-            >
-              <Arrow
-                height={15}
-                width={24}
-                style={{ color: "#A9A9A9", transform: [{ rotate: "180deg" }] }}
-              />
-            </Pressable>
-          </View>
+        <ResetDatabaseButton />
 
-          <Text className="font-inter-semibold text-[12px]">
-            {filtered.length === 0
-              ? "No results"
-              : `Showing students ${startIndex + 1}–${Math.min(endIndex, filtered.length)} of ${filtered.length}`}
-          </Text>
-        </View>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <View className="flex flex-row items-center justify-between gap-[10px]">
+            <View className="flex flex-row gap-[10px]">
+              <Pressable
+                disabled={isFirst}
+                onPress={() => setPage((p) => Math.max(1, p - 1))}
+                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isFirst ? "opacity-40" : ""
+                  }`}
+              >
+                <Arrow height={15} width={24} style={{ color: "#A9A9A9" }} />
+              </Pressable>
+
+              <Pressable
+                disabled={isLast}
+                onPress={() =>
+                  setPage((p) => Math.min(totalPages, p + 1))
+                }
+                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isLast ? "opacity-40" : ""
+                  }`}
+              >
+                <Arrow
+                  height={15}
+                  width={24}
+                  style={{
+                    color: "#A9A9A9",
+                    transform: [{ rotate: "180deg" }],
+                  }}
+                />
+              </Pressable>
+            </View>
+
+            <Text className="font-inter-semibold text-[12px]">
+              {filtered.length === 0
+                ? "No results"
+                : `Showing students ${startIndex + 1}–${Math.min(
+                  endIndex,
+                  filtered.length
+                )} of ${filtered.length}`}
+            </Text>
+          </View>
+        )}
       </ScrollView>
 
-      <AddStudentModal
-        visible={addOpen}
-        onClose={() => setAddOpen(false)}
-        onSubmit={handleAddStudent}
-      />
+      {/* New student drawer */}
+      <Drawer
+        visible={drawerOpen}
+        onClose={handleCloseDrawer}
+        title="New Student"
+        visible_closeButton={true}
+        footer={
+          <View className="flex-1 flex-row items-center justify-end gap-[16px]">
+            <Pressable disabled={saving} onPress={handleCloseDrawer} className="items-center py-2 px-[12px]">
+              <Text className="font-inter-semibold text-[12px] text-muted">
+                Cancel
+              </Text>
+            </Pressable>
+            <Button label={saving ? "Saving..." : "Add Student"} onPress={() => void handleAddStudent()}/>
+          </View>
+        }
+      >
+        <View className="gap-[18px] pt-3">
+          <View className="gap-[8px]">
+            <Text className="font-inter-semibold text-[12px]">
+              Student Name *
+            </Text>
+
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter student's full name"
+              placeholderTextColor="#A9A9A9"
+              autoCapitalize="words"
+              autoCorrect={false}
+              editable={!saving}
+              className="border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground"
+            />
+          </View>
+
+          <View className="flex flex-row gap-[16px]">
+            <View className="flex-1 gap-[8px]">
+              <Text className="font-inter-semibold text-[12px]">
+                Email
+              </Text>
+
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter email (optional)"
+                placeholderTextColor="#A9A9A9"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!saving}
+                className="border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground"
+              />
+            </View>
+
+            <View className="flex-1 gap-[8px]">
+              <Text className="font-inter-semibold text-[12px]">
+                Contact
+              </Text>
+
+              <TextInput
+                value={phone}
+                onChangeText={setPhone}
+                placeholder="Enter contact number (optional)"
+                placeholderTextColor="#A9A9A9"
+                keyboardType="phone-pad"
+                editable={!saving}
+                className="border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground"
+              />
+            </View>
+          </View>
+
+          <View className="gap-[8px]">
+            <Text className="font-inter-semibold text-[12px]">
+              Notes
+            </Text>
+
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Additional student information (optional)"
+              placeholderTextColor="#A9A9A9"
+              multiline
+              textAlignVertical="top"
+              editable={!saving}
+              className="min-h-[100px] border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground"
+            />
+          </View>
+
+          <View className="gap-[8px]">
+            <Text className="font-inter-semibold text-[12px]">
+              Enroll in Classes
+            </Text>
+          </View>
+
+          {error ? (
+            <Text className="font-inter text-[12px] text-red-600">
+              {error}
+            </Text>
+          ) : null}
+
+          <Text className="font-inter text-[10px] text-muted">
+            Student information is saved locally on this device.
+          </Text>
+        </View>
+      </Drawer>
     </>
   );
 }

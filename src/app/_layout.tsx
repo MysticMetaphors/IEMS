@@ -1,17 +1,7 @@
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-} from "@expo-google-fonts/inter";
-import { Stack } from "expo-router";
-
-import {
-  OleoScriptSwashCaps_400Regular,
-} from "@expo-google-fonts/oleo-script-swash-caps";
-
+import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from "@expo-google-fonts/inter";
+import { OleoScriptSwashCaps_400Regular } from "@expo-google-fonts/oleo-script-swash-caps";
 import { useFonts } from "expo-font";
-
+import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
 
