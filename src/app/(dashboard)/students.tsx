@@ -1,9 +1,9 @@
-import Arrow from "@/assets/icons/arrow.svg";
 import AddStudent from "@/assets/icons/user-add-fill.svg";
 import Button from "@/components/button";
 import SearchInput from "@/components/search-input";
 import Menu from "@/components/ui/menu";
 import Modal from "@/components/ui/modal";
+import Pagination from "@/components/ui/pagination";
 import StudentDrawer, { DrawerMode, Student, StudentFormPayload } from "@/components/ui/student-drawer";
 // import { ResetDatabaseButton } from "@/db/refresh-database/button";
 import { createStudent, deleteStudent, getStudents, updateStudent } from "@/db/student/student";
@@ -281,43 +281,16 @@ export default function Students() {
 
         {/* <ResetDatabaseButton /> */}
 
-        {/* Pagination */}
         {totalPages > 1 && (
-          <View className="flex flex-row items-center justify-between gap-[10px]">
-            <View className="flex flex-row gap-[10px]">
-              <Pressable
-                disabled={isFirst}
-                onPress={() => setPage((p) => Math.max(1, p - 1))}
-                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isFirst ? "opacity-40" : ""}`}
-              >
-                <Arrow height={15} width={24} style={{ color: "#A9A9A9" }} />
-              </Pressable>
-
-              <Pressable
-                disabled={isLast}
-                onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isLast ? "opacity-40" : ""}`}
-              >
-                <Arrow
-                  height={15}
-                  width={24}
-                  style={{
-                    color: "#A9A9A9",
-                    transform: [{ rotate: "180deg" }],
-                  }}
-                />
-              </Pressable>
-            </View>
-
-            <Text className="font-inter-semibold text-[12px]">
-              {filtered.length === 0
-                ? "No results"
-                : `Showing students ${startIndex + 1}–${Math.min(
-                    endIndex,
-                    filtered.length
-                  )} of ${filtered.length}`}
-            </Text>
-          </View>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            startIndex={startIndex}
+            endIndex={endIndex}
+            itemLabel="students"
+            setPage={setPage}
+          />
         )}
       </ScrollView>
 
