@@ -155,6 +155,35 @@ export async function syncClassEnrollments(classId: string, studentIds: string[]
   });
 }
 
+// Make a student's active classes match `classIds` exactly.
+// Newly checked classes are enrolled (or revived); unchecked ones are removed.
+export async function syncStudentEnrollments(studentId: string, classIds: string[]) {
+  const db = await getDatabase();
+
+  const current = await db.getAllAsync<{ id: string; class_id: string }>(
+    `SELECT id, class_id FROM class_enrollments
+     WHERE student_id = ? AND status = 'active' AND deleted_at IS NULL`,
+    studentId
+  );
+
+  const selected = new Set(classIds);
+  const currentIds = new Set(current.map((e) => e.class_id));
+
+  const toAdd = classIds.filter((id) => !currentIds.has(id));
+  const toRemove = current.filter((e) => !selected.has(e.class_id));
+
+  if (toAdd.length === 0 && toRemove.length === 0) return;
+
+  await db.withTransactionAsync(async () => {
+    for (const classId of toAdd) {
+      await enrollStudent({ studentId, classId });
+    }
+    for (const enrollment of toRemove) {
+      await removeEnrollment(enrollment.id);
+    }
+  });
+}
+
 // Soft delete: removes the student from the class but keeps the row for syncing.
 export async function removeEnrollment(id: string) {
   const db = await getDatabase();

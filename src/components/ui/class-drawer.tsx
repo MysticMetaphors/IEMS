@@ -353,12 +353,6 @@ export default function ClassDrawer({
         {saveError ? (
           <Text className="font-inter text-[12px] text-red-600">{saveError}</Text>
         ) : null}
-
-        {!readOnly && (
-          <Text className="font-inter text-[10px] text-muted">
-            Class information is saved locally on this device.
-          </Text>
-        )}
       </View>
     </Drawer>
   );

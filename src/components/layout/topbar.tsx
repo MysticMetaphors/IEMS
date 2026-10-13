@@ -1,8 +1,8 @@
 import Notification from "@/assets/icons/topbar/bell.svg";
-import Mail from "@/assets/icons/topbar/mail.svg";
+// import Mail from "@/assets/icons/topbar/mail.svg";
 import Menu from "@/assets/icons/topbar/menu.svg";
 
-import { Image, Pressable, Text, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 
 export default function Topbar({ onMenuPress }: { onMenuPress: () => void}) {
   return (
@@ -14,19 +14,23 @@ export default function Topbar({ onMenuPress }: { onMenuPress: () => void}) {
         />
       </Pressable>
       <View className="flex flex-row items-center gap-[7px]">
-        <View className="border border-border bg-card rounded-full h-[48px] w-[48px] flex flex-row gap-[10px] items-center justify-center">
-          <Mail 
+         <View className="border border-border bg-card rounded-full h-[48px] w-[48px] flex flex-row gap-[10px] items-center justify-center">
+          {/*<Mail 
             height={24}
             width={24}
-          />
-        </View>
-        <View className="border border-border bg-card rounded-full h-[48px] px-[17px] flex flex-row gap-[10px] items-center">
+          />*/}
           <Notification 
             height={24}
             width={24}
           />
+        </View> 
+        {/* <View className="border border-border bg-card rounded-full h-[48px] px-[17px] flex flex-row gap-[10px] items-center">
+          <Mail 
+            height={24}
+            width={24}
+          />
           <Text className="text-muted font-inter-semibold text-[12px]">Notifications</Text>
-        </View>
+        </View> */}
         <View className="bg-border/20 rounded-full w-[2px] h-[30px]"/>
         <Image
           source={require("@/assets/images/placeholder.png")}

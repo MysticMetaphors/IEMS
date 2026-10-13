@@ -1,11 +1,13 @@
+import Arrow from "@/assets/icons/arrow.svg";
 import AddStudent from "@/assets/icons/user-add-fill.svg";
 import Button from "@/components/button";
 import SearchInput from "@/components/search-input";
 import Menu from "@/components/ui/menu";
 import Modal from "@/components/ui/modal";
-import Pagination from "@/components/ui/pagination";
 import StudentDrawer, { DrawerMode, Student, StudentFormPayload } from "@/components/ui/student-drawer";
 // import { ResetDatabaseButton } from "@/db/refresh-database/button";
+import { getClasses } from "@/db/classes/classes";
+import { getEnrollmentsByStudent, syncStudentEnrollments } from "@/db/classes/enrollment";
 import { createStudent, deleteStudent, getStudents, updateStudent } from "@/db/student/student";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
@@ -46,6 +48,10 @@ export default function Students() {
     student: null,
   });
 
+  // Classes feed the enroll checklist; drawerClassIds is the shown student's current classes.
+  const [classes, setClasses] = useState<Awaited<ReturnType<typeof getClasses>>>([]);
+  const [drawerClassIds, setDrawerClassIds] = useState<string[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -59,8 +65,9 @@ export default function Students() {
       setLoading(true);
       setLoadError("");
 
-      const result = await getStudents();
+      const [result, classResult] = await Promise.all([getStudents(), getClasses()]);
       setStudents(result);
+      setClasses(classResult);
     } catch (err) {
       console.error("Failed to load students:", err);
       setLoadError("Unable to load students. Please try again.");
@@ -97,9 +104,22 @@ export default function Students() {
   };
 
   // ---- Drawer controls ----
-  const openDrawer = (mode: DrawerMode, student: Student | null = null) => {
+  // Existing students need their current classes loaded so the checkboxes start correct.
+  const openDrawer = async (mode: DrawerMode, student: Student | null = null) => {
     setSaveError(null);
-    setDrawer({ open: true, mode, student });
+
+    try {
+      if (student) {
+        const enrollments = await getEnrollmentsByStudent(student.id);
+        setDrawerClassIds(enrollments.filter((e) => e.status === "active").map((e) => e.class_id));
+      } else {
+        setDrawerClassIds([]);
+      }
+      setDrawer({ open: true, mode, student });
+    } catch (err) {
+      console.error("Failed to load student classes:", err);
+      setLoadError("Unable to load the student details. Please try again.");
+    }
   };
 
   const closeDrawer = () => {
@@ -131,7 +151,9 @@ export default function Students() {
       setSaving(true);
       setSaveError(null);
 
-      await createStudent(input);
+      const { classIds, ...fields } = input;
+      const id = await createStudent(fields);
+      await syncStudentEnrollments(id, classIds);
 
       // Refresh from SQLite so the UI reflects persisted records.
       setStudents(await getStudents());
@@ -151,13 +173,16 @@ export default function Students() {
       setSaving(true);
       setSaveError(null);
 
-      await updateStudent(input);
+      const { id, classIds, ...fields } = input;
+      await updateStudent({ id, ...fields });
+      await syncStudentEnrollments(id, classIds);
 
       const result = await getStudents();
       setStudents(result);
 
       // Go back to the details view showing the fresh data.
-      const updated = result.find((s) => s.id === input.id) ?? null;
+      const updated = result.find((s) => s.id === id) ?? null;
+      setDrawerClassIds(classIds);
       setDrawer({ open: true, mode: "view", student: updated });
     } catch (err) {
       console.error("Failed to update student:", err);
@@ -281,16 +306,43 @@ export default function Students() {
 
         {/* <ResetDatabaseButton /> */}
 
+        {/* Pagination */}
         {totalPages > 1 && (
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            totalItems={filtered.length}
-            startIndex={startIndex}
-            endIndex={endIndex}
-            itemLabel="students"
-            setPage={setPage}
-          />
+          <View className="flex flex-row items-center justify-between gap-[10px]">
+            <View className="flex flex-row gap-[10px]">
+              <Pressable
+                disabled={isFirst}
+                onPress={() => setPage((p) => Math.max(1, p - 1))}
+                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isFirst ? "opacity-40" : ""}`}
+              >
+                <Arrow height={15} width={24} style={{ color: "#A9A9A9" }} />
+              </Pressable>
+
+              <Pressable
+                disabled={isLast}
+                onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isLast ? "opacity-40" : ""}`}
+              >
+                <Arrow
+                  height={15}
+                  width={24}
+                  style={{
+                    color: "#A9A9A9",
+                    transform: [{ rotate: "180deg" }],
+                  }}
+                />
+              </Pressable>
+            </View>
+
+            <Text className="font-inter-semibold text-[12px]">
+              {filtered.length === 0
+                ? "No results"
+                : `Showing students ${startIndex + 1}–${Math.min(
+                    endIndex,
+                    filtered.length
+                  )} of ${filtered.length}`}
+            </Text>
+          </View>
         )}
       </ScrollView>
 
@@ -299,6 +351,8 @@ export default function Students() {
         open={drawer.open}
         mode={drawer.mode}
         initial={drawer.student}
+        classes={classes}
+        initialClassIds={drawerClassIds}
         onClose={closeDrawer}
         onCreate={(input) => void handleCreate(input)}
         onUpdate={(input) => void handleUpdate(input)}
