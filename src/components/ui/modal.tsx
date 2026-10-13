@@ -39,7 +39,6 @@ export default function Modal({
     <RNModal
       visible={visible}
       transparent
-      animationType="fade"
       statusBarTranslucent
       onRequestClose={onClose} // Android back button
     >
@@ -50,7 +49,7 @@ export default function Modal({
         <View className="flex-1 items-center justify-center px-[20px]">
           {/* Backdrop */}
           <Pressable
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/20"
             onPress={dismissOnBackdrop ? onClose : undefined}
           />
 

@@ -8,8 +8,8 @@ import Students from "@/assets/icons/sidebar/students.svg";
 import ConcaveBorderAskSomething from "@/assets/navigation-concave.svg";
 
 import { usePathname, useRouter } from "expo-router";
-import React, { memo, useCallback } from "react";
-import { Pressable, Text, View } from "react-native";
+import React, { memo, useCallback, useEffect, useRef } from "react";
+import { Animated, Pressable, Text, View } from "react-native";
 import type { SvgProps } from "react-native-svg";
 
 type MenuItem = {
@@ -63,15 +63,43 @@ const NavItem = memo(function NavItem({ label, route, icon: Icon }: MenuItem) {
   );
 });
 
+
 function Navigation() {
   const router = useRouter();
+  const pathname = usePathname();
+
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const isAssistant = pathname === "/assistant";
+
+  useEffect(() => {
+    Animated.timing(slideAnim, {
+      toValue: isAssistant ? 1 : 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start();
+  }, [isAssistant, slideAnim]);
+
   const handleAskSomething = useCallback(() => {
     router.replace("/assistant");
   }, [router]);
 
+  const translateX = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 240],
+  });
+
   return (
     <View className="bg-white relative pt-[15px] pb-[50px] px-[41px] flex flex-row items-center justify-center gap-[14px] border-t border-[#DFDFDF]">
-      <View className="absolute bottom-[118px] right-0 flex-row items-end z-10 translate-y-[1px]">
+      <Animated.View
+        pointerEvents={isAssistant ? "none" : "auto"}
+        style={{
+          position: "absolute",
+          bottom: 118,
+          right: 0,
+          zIndex: 10,
+          transform: [{ translateX }],
+        }}
+      >
         <View className="relative h-[75px] w-[200px] rounded-tl-[35px] pl-10 border-l border-t border-border bg-white">
           <ConcaveBorderAskSomething
             height={28}
@@ -83,6 +111,7 @@ function Navigation() {
               color: "#DFDFDF",
             }}
           />
+
           <Pressable
             onPress={handleAskSomething}
             className="absolute right-[16px] top-[14px] flex h-[48px] w-[170px] flex-row items-center gap-[10px] rounded-full border border-[#DFDFDF] bg-card px-[17px]"
@@ -93,7 +122,7 @@ function Navigation() {
             </Text>
           </Pressable>
         </View>
-      </View>
+      </Animated.View>
 
       <View className="absolute bottom-0 left-0 w-[100vw] bg-border h-[88px]" />
 
@@ -103,6 +132,7 @@ function Navigation() {
     </View>
   );
 }
+
 
 // No props, so once the parent layout has mounted this once, it will
 // never re-render again unless React is forced to (e.g. a key change).

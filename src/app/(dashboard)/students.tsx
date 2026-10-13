@@ -1,44 +1,69 @@
 import Arrow from "@/assets/icons/arrow.svg";
-import Ellipsis from "@/assets/icons/dots-vertical-rounded.svg";
 import AddStudent from "@/assets/icons/user-add-fill.svg";
 import Button from "@/components/button";
 import SearchInput from "@/components/search-input";
-import Drawer from "@/components/ui/drawer";
-import { ResetDatabaseButton } from "@/db/refresh-database/button";
-import { createStudent, getStudents } from "@/db/student/student";
+import Menu from "@/components/ui/menu";
+import Modal from "@/components/ui/modal";
+import StudentDrawer, { DrawerMode, Student, StudentFormPayload } from "@/components/ui/student-drawer";
+// import { ResetDatabaseButton } from "@/db/refresh-database/button";
+import { createStudent, deleteStudent, getStudents, updateStudent } from "@/db/student/student";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
 
-type Student = Awaited<ReturnType<typeof getStudents>>[number];
+// Delay before showing the confirm modal so the drawer has finished
+// dismissing first (iOS can't present two modals at the same time).
+const DRAWER_CLOSE_DELAY_MS = 300;
+
+// All drawer state lives in one object. Closing only flips `open`, so the
+// drawer keeps its mode/student while it animates out.
+type DrawerState = {
+  open: boolean;
+  mode: DrawerMode;
+  student: Student | null;
+};
+
+// Same idea for the delete confirmation: keep the student while it animates out.
+type DeleteState = {
+  open: boolean;
+  student: Student | null;
+};
 
 export default function Students() {
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [notes, setNotes] = useState("");
+  const [drawer, setDrawer] = useState<DrawerState>({
+    open: false,
+    mode: "add",
+    student: null,
+  });
+
+  const [deleteState, setDeleteState] = useState<DeleteState>({
+    open: false,
+    student: null,
+  });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Load students through the existing database helper.
   const loadStudents = useCallback(async () => {
     try {
       setLoading(true);
-      setError("");
+      setLoadError("");
 
       const result = await getStudents();
       setStudents(result);
     } catch (err) {
       console.error("Failed to load students:", err);
-      setError("Unable to load students. Please try again.");
+      setLoadError("Unable to load students. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -71,53 +96,95 @@ export default function Students() {
     setPage(1);
   };
 
-  const resetForm = () => {
-    setName("");
-    setEmail("");
-    setPhone("");
-    setNotes("");
-    setError("");
+  // ---- Drawer controls ----
+  const openDrawer = (mode: DrawerMode, student: Student | null = null) => {
+    setSaveError(null);
+    setDrawer({ open: true, mode, student });
   };
 
-  const handleCloseDrawer = () => {
+  const closeDrawer = () => {
     if (saving) return;
-
-    setDrawerOpen(false);
-    resetForm();
+    setDrawer((prev) => ({ ...prev, open: false }));
   };
 
-  const handleAddStudent = async () => {
-    const trimmedName = name.trim();
+  // ---- Delete confirmation controls ----
+  // Closes the drawer first (if it's open), then shows the confirm modal.
+  const requestDelete = (student: Student | null) => {
+    if (!student) return;
 
-    if (!trimmedName) {
-      setError("Please enter the student's name.");
-      return;
-    }
+    setDeleteError(null);
+    setDrawer((prev) => ({ ...prev, open: false }));
 
+    setTimeout(() => {
+      setDeleteState({ open: true, student });
+    }, DRAWER_CLOSE_DELAY_MS);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleting) return;
+    setDeleteState((prev) => ({ ...prev, open: false }));
+  };
+
+  // ---- CRUD handlers ----
+  const handleCreate = async (input: StudentFormPayload) => {
     try {
       setSaving(true);
-      setError("");
+      setSaveError(null);
 
-      await createStudent({
-        name: trimmedName,
-        email,
-        phone,
-        notes,
-      });
+      await createStudent(input);
 
       // Refresh from SQLite so the UI reflects persisted records.
-      const result = await getStudents();
-
-      setStudents(result);
+      setStudents(await getStudents());
       setSearch("");
       setPage(1);
-      setDrawerOpen(false);
-      resetForm();
+      setDrawer((prev) => ({ ...prev, open: false }));
     } catch (err) {
       console.error("Failed to create student:", err);
-      setError("Unable to save the student. Please try again.");
+      setSaveError("Unable to save the student. Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpdate = async (input: StudentFormPayload & { id: Student["id"] }) => {
+    try {
+      setSaving(true);
+      setSaveError(null);
+
+      await updateStudent(input);
+
+      const result = await getStudents();
+      setStudents(result);
+
+      // Go back to the details view showing the fresh data.
+      const updated = result.find((s) => s.id === input.id) ?? null;
+      setDrawer({ open: true, mode: "view", student: updated });
+    } catch (err) {
+      console.error("Failed to update student:", err);
+      setSaveError("Unable to update the student. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const student = deleteState.student;
+    if (!student) return;
+
+    try {
+      setDeleting(true);
+      setDeleteError(null);
+
+      await deleteStudent(student.id);
+
+      setStudents(await getStudents());
+      setPage(1);
+      setDeleteState((prev) => ({ ...prev, open: false }));
+    } catch (err) {
+      console.error("Failed to delete student:", err);
+      setDeleteError("Unable to delete the student. Please try again.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -143,22 +210,14 @@ export default function Students() {
           <Button
             LeftIcon={AddStudent}
             label="New Student"
-            onPress={() => {
-              setError("");
-              setDrawerOpen(true);
-            }}
+            onPress={() => openDrawer("add")}
           />
         </View>
 
         {/* Column headings */}
         <View className="flex flex-row items-center justify-between h-fit w-full">
-          <Text className="font-inter-semibold text-[12px]">
-            Students
-          </Text>
-
-          <Text className="font-inter-semibold text-[12px]">
-            Actions
-          </Text>
+          <Text className="font-inter-semibold text-[12px]">Students</Text>
+          <Text className="font-inter-semibold text-[12px]">Actions</Text>
         </View>
 
         {/* Student list */}
@@ -166,21 +225,18 @@ export default function Students() {
           {loading ? (
             <View className="items-center py-6">
               <ActivityIndicator />
-
               <Text className="font-inter text-[12px] text-muted mt-2">
                 Loading students...
               </Text>
             </View>
-          ) : error && students.length === 0 ? (
+          ) : loadError && students.length === 0 ? (
             <View className="items-center gap-3 py-6">
               <Text className="font-inter text-[12px] text-muted text-center">
-                {error}
+                {loadError}
               </Text>
 
               <Pressable onPress={() => void loadStudents()}>
-                <Text className="font-inter-semibold text-[12px]">
-                  Try again
-                </Text>
+                <Text className="font-inter-semibold text-[12px]">Try again</Text>
               </Pressable>
             </View>
           ) : paginated.length === 0 ? (
@@ -191,7 +247,10 @@ export default function Students() {
             </Text>
           ) : (
             paginated.map((student) => (
-              <View key={student.id} className="px-[16px] py-[13px] flex flex-row justify-between items-center rounded-[12px] border border-border bg-card" >
+              <View
+                key={student.id}
+                className="px-[16px] py-[13px] flex flex-row justify-between items-center rounded-[12px] border border-border bg-card"
+              >
                 <View className="flex-1 flex-row items-center gap-[10px] mr-3">
                   <View className="flex-1">
                     <Text className="font-inter-bold text-[12px] text-foreground">
@@ -199,27 +258,28 @@ export default function Students() {
                     </Text>
 
                     <Text className="font-inter text-[10px] text-muted">
-                      {student.email || student.phone || "No contact information"} 
+                      {student.email || student.phone || "No contact information"}
                     </Text>
                   </View>
                 </View>
 
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Actions for ${student.name}`}
-                  hitSlop={8}
-                  onPress={() => {
-                    // Add student actions here later.
-                  }}
-                >
-                  <Ellipsis height={22} width={22} />
-                </Pressable>
+                <Menu
+                  items={[
+                    { label: "View Details", onPress: () => openDrawer("view", student) },
+                    { label: "Edit Student", onPress: () => openDrawer("edit", student) },
+                    {
+                      label: "Delete",
+                      type: "destructive",
+                      onPress: () => requestDelete(student),
+                    },
+                  ]}
+                />
               </View>
             ))
           )}
         </View>
 
-        <ResetDatabaseButton />
+        {/* <ResetDatabaseButton /> */}
 
         {/* Pagination */}
         {totalPages > 1 && (
@@ -228,19 +288,15 @@ export default function Students() {
               <Pressable
                 disabled={isFirst}
                 onPress={() => setPage((p) => Math.max(1, p - 1))}
-                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isFirst ? "opacity-40" : ""
-                  }`}
+                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isFirst ? "opacity-40" : ""}`}
               >
                 <Arrow height={15} width={24} style={{ color: "#A9A9A9" }} />
               </Pressable>
 
               <Pressable
                 disabled={isLast}
-                onPress={() =>
-                  setPage((p) => Math.min(totalPages, p + 1))
-                }
-                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isLast ? "opacity-40" : ""
-                  }`}
+                onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className={`px-[13px] py-[15px] bg-card rounded-[12px] border border-border ${isLast ? "opacity-40" : ""}`}
               >
                 <Arrow
                   height={15}
@@ -257,119 +313,73 @@ export default function Students() {
               {filtered.length === 0
                 ? "No results"
                 : `Showing students ${startIndex + 1}–${Math.min(
-                  endIndex,
-                  filtered.length
-                )} of ${filtered.length}`}
+                    endIndex,
+                    filtered.length
+                  )} of ${filtered.length}`}
             </Text>
           </View>
         )}
       </ScrollView>
 
-      {/* New student drawer */}
-      <Drawer
-        visible={drawerOpen}
-        onClose={handleCloseDrawer}
-        title="New Student"
-        visible_closeButton={true}
-        footer={
-          <View className="flex-1 flex-row items-center justify-end gap-[16px]">
-            <Pressable disabled={saving} onPress={handleCloseDrawer} className="items-center py-2 px-[12px]">
-              <Text className="font-inter-semibold text-[12px] text-muted">
-                Cancel
-              </Text>
-            </Pressable>
-            <Button label={saving ? "Saving..." : "Add Student"} onPress={() => void handleAddStudent()}/>
-          </View>
-        }
+      {/* One drawer for add / edit / view */}
+      <StudentDrawer
+        open={drawer.open}
+        mode={drawer.mode}
+        initial={drawer.student}
+        onClose={closeDrawer}
+        onCreate={(input) => void handleCreate(input)}
+        onUpdate={(input) => void handleUpdate(input)}
+        onEdit={() => {
+          setSaveError(null);
+          setDrawer((prev) => ({ ...prev, mode: "edit" }));
+        }}
+        onDelete={() => requestDelete(drawer.student)}
+        isSaving={saving}
+        saveError={saveError}
+      />
+
+      {/* Delete confirmation */}
+      <Modal
+        title="Confirm Delete"
+        visible={deleteState.open}
+        onClose={closeDeleteModal}
+        dismissOnBackdrop={false}
+        showClose={false}
       >
-        <View className="gap-[18px] pt-3">
-          <View className="gap-[8px]">
-            <Text className="font-inter-semibold text-[12px]">
-              Student Name *
+        <View className="gap-[16px]">
+          <Text className="font-inter text-[14px] text-muted">
+            Are you sure you want to delete{" "}
+            <Text className="font-inter-semibold text-foreground">
+              {deleteState.student?.name ?? "this student"}
             </Text>
+            ? This can't be undone.
+          </Text>
 
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter student's full name"
-              placeholderTextColor="#A9A9A9"
-              autoCapitalize="words"
-              autoCorrect={false}
-              editable={!saving}
-              className="border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground"
-            />
-          </View>
-
-          <View className="flex flex-row gap-[16px]">
-            <View className="flex-1 gap-[8px]">
-              <Text className="font-inter-semibold text-[12px]">
-                Email
-              </Text>
-
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter email (optional)"
-                placeholderTextColor="#A9A9A9"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!saving}
-                className="border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground"
-              />
-            </View>
-
-            <View className="flex-1 gap-[8px]">
-              <Text className="font-inter-semibold text-[12px]">
-                Contact
-              </Text>
-
-              <TextInput
-                value={phone}
-                onChangeText={setPhone}
-                placeholder="Enter contact number (optional)"
-                placeholderTextColor="#A9A9A9"
-                keyboardType="phone-pad"
-                editable={!saving}
-                className="border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground"
-              />
-            </View>
-          </View>
-
-          <View className="gap-[8px]">
-            <Text className="font-inter-semibold text-[12px]">
-              Notes
-            </Text>
-
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Additional student information (optional)"
-              placeholderTextColor="#A9A9A9"
-              multiline
-              textAlignVertical="top"
-              editable={!saving}
-              className="min-h-[100px] border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground"
-            />
-          </View>
-
-          <View className="gap-[8px]">
-            <Text className="font-inter-semibold text-[12px]">
-              Enroll in Classes
-            </Text>
-          </View>
-
-          {error ? (
-            <Text className="font-inter text-[12px] text-red-600">
-              {error}
-            </Text>
+          {deleteError ? (
+            <Text className="font-inter text-[12px] text-red-600">{deleteError}</Text>
           ) : null}
 
-          <Text className="font-inter text-[10px] text-muted">
-            Student information is saved locally on this device.
-          </Text>
+          <View className="flex-row items-center justify-end gap-[16px]">
+            <Pressable
+              disabled={deleting}
+              onPress={closeDeleteModal}
+              className="items-center py-2 px-[12px]"
+            >
+              <Text className="font-inter-semibold text-[12px] text-muted">Cancel</Text>
+            </Pressable>
+
+            <Pressable
+              disabled={deleting}
+              onPress={() => void handleConfirmDelete()}
+              className={`items-center rounded-[12px] bg-red-600 px-[16px] py-[10px] ${deleting ? "opacity-60" : ""}`}
+            >
+              <Text className="font-inter-semibold text-[12px] text-white">
+                {deleting ? "Deleting..." : "Delete"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
-      </Drawer>
+      </Modal>
     </>
   );
 }

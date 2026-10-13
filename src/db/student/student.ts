@@ -49,3 +49,42 @@ export async function getStudents() {
      ORDER BY name COLLATE NOCASE ASC`
   );
 }
+
+export async function updateStudent(input: StudentInput & { id: string }) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+
+  await db.runAsync(
+    `UPDATE students
+     SET name = ?,
+         email = ?,
+         phone = ?,
+         notes = ?,
+         updated_at = ?,
+         sync_status = 'pending'
+     WHERE id = ? AND deleted_at IS NULL`,
+    input.name.trim(),
+    input.email?.trim() || null,
+    input.phone?.trim() || null,
+    input.notes?.trim() || null,
+    now,
+    input.id
+  );
+}
+
+// Soft delete: the row stays so the deletion can be synced later.
+export async function deleteStudent(id: string) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+
+  await db.runAsync(
+    `UPDATE students
+     SET deleted_at = ?,
+         updated_at = ?,
+         sync_status = 'pending'
+     WHERE id = ? AND deleted_at IS NULL`,
+    now,
+    now,
+    id
+  );
+}
