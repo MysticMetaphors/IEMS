@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS classes (
   name TEXT NOT NULL,
   description TEXT,
   subject TEXT,
+  color TEXT,
   status TEXT NOT NULL DEFAULT 'active'
     CHECK (status IN ('active', 'archived')),
   created_at TEXT NOT NULL,
@@ -48,6 +49,24 @@ CREATE TABLE IF NOT EXISTS class_enrollments (
   UNIQUE (student_id, class_id)
 );
 
+CREATE TABLE IF NOT EXISTS class_sessions (
+  id TEXT PRIMARY KEY NOT NULL,
+  owner_id TEXT,
+  class_id TEXT NOT NULL REFERENCES classes(id),
+  title TEXT,
+  starts_at TEXT NOT NULL,
+  ends_at TEXT NOT NULL,
+  color TEXT,
+  status TEXT NOT NULL DEFAULT 'scheduled'
+    CHECK (status IN ('scheduled', 'completed', 'cancelled')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT,
+  sync_status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (sync_status IN ('pending', 'synced', 'conflict')),
+  CHECK (ends_at > starts_at)
+);
+
 CREATE INDEX IF NOT EXISTS idx_students_name
   ON students(name);
 
@@ -68,6 +87,15 @@ CREATE INDEX IF NOT EXISTS idx_classes_sync
 
 CREATE INDEX IF NOT EXISTS idx_enrollments_sync
   ON class_enrollments(sync_status, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_start
+  ON class_sessions(starts_at);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_class_start
+  ON class_sessions(class_id, starts_at);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_sync
+  ON class_sessions(sync_status, updated_at);
 `;
 
 
@@ -120,25 +148,6 @@ CREATE INDEX IF NOT EXISTS idx_enrollments_sync
 //   sync_status TEXT NOT NULL DEFAULT 'pending'
 //     CHECK (sync_status IN ('pending', 'synced', 'conflict')),
 //   UNIQUE (student_id, class_id)
-// );
-
-// CREATE TABLE IF NOT EXISTS class_sessions (
-//   id TEXT PRIMARY KEY NOT NULL,
-//   owner_id TEXT,
-//   class_id TEXT NOT NULL REFERENCES classes(id),
-//   title TEXT,
-//   starts_at TEXT NOT NULL,
-//   ends_at TEXT NOT NULL,
-//   status TEXT NOT NULL DEFAULT 'scheduled'
-//     CHECK (status IN (
-//       'scheduled', 'completed', 'cancelled'
-//     )),
-//   created_at TEXT NOT NULL,
-//   updated_at TEXT NOT NULL,
-//   deleted_at TEXT,
-//   sync_status TEXT NOT NULL DEFAULT 'pending'
-//     CHECK (sync_status IN ('pending', 'synced', 'conflict')),
-//   CHECK (ends_at > starts_at)
 // );
 
 // CREATE TABLE IF NOT EXISTS attendance (
@@ -236,12 +245,6 @@ CREATE INDEX IF NOT EXISTS idx_enrollments_sync
 // CREATE INDEX IF NOT EXISTS idx_enrollments_student
 //   ON class_enrollments(student_id, status);
 
-// CREATE INDEX IF NOT EXISTS idx_sessions_start
-//   ON class_sessions(starts_at);
-
-// CREATE INDEX IF NOT EXISTS idx_sessions_class_start
-//   ON class_sessions(class_id, starts_at);
-
 // CREATE INDEX IF NOT EXISTS idx_attendance_student
 //   ON attendance(student_id, session_id);
 
@@ -256,7 +259,3 @@ CREATE INDEX IF NOT EXISTS idx_enrollments_sync
 
 // CREATE INDEX IF NOT EXISTS idx_classes_sync
 //   ON classes(sync_status, updated_at);
-
-// CREATE INDEX IF NOT EXISTS idx_sessions_sync
-//   ON class_sessions(sync_status, updated_at);
-// `;

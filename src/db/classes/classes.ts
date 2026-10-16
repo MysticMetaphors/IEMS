@@ -1,3 +1,4 @@
+import generateColorPair from '@/lib/utils/color-pair';
 import { createId, createSequentialId } from './../ids';
 import { getDatabase } from './../index';
 
@@ -16,13 +17,17 @@ export async function createClass(input: ClassInput) {
   const now = new Date().toISOString();
   const customId = await createSequentialId("classes");
 
+  const { dark, light } = generateColorPair();
+  const color = `${dark},${light}`;
+
   await db.runAsync(
     `INSERT INTO classes (
-      id, custom_id, name, description, subject, status,
+      id, custom_id, color, name, description, subject, status,
       created_at, updated_at, sync_status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
     id,
     customId,
+    color,
     input.name.trim(),
     input.description?.trim() || null,
     input.subject?.trim() || null,
@@ -42,13 +47,14 @@ export async function getClasses() {
     id: string;
     custom_id: string;
     name: string;
+    color: string;
     description: string | null;
     subject: string | null;
     status: ClassStatus;
     student_count: number;
   }>(
     `SELECT
-       c.id, c.custom_id, c.name, c.description, c.subject, c.status,
+       c.id, c.custom_id, c.color, c.name, c.description, c.subject, c.status,
        COUNT(e.id) AS student_count
      FROM classes c
      LEFT JOIN class_enrollments e

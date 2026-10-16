@@ -1,4 +1,4 @@
-import Filter from "@/assets/icons/filter.svg";
+// import Filter from "@/assets/icons/filter.svg";
 import Button from "@/components/button";
 import SearchInput from "@/components/search-input";
 import ClassDrawer, { ClassDrawerMode, ClassFormPayload, ClassItem } from "@/components/ui/class-drawer";
@@ -28,13 +28,6 @@ type DeleteState = {
   open: boolean;
   classItem: ClassItem | null;
 };
-
-// "Group Class" when several students are enrolled, otherwise the student's name.
-function enrolledLabel(classItem: ClassItem) {
-  if (classItem.student_count > 1) return "Group Class";
-  if (classItem.student_count === 1) return classItem.name ?? "1 student";
-  return "No students enrolled";
-}
 
 export default function Classes() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -231,8 +224,8 @@ export default function Classes() {
         {/* Search and create */}
         <View className="flex flex-row gap-[10px] max-w-full">
           <SearchInput value={search} onChangeText={handleSearch} className="flex-1" />
-          <Button LeftIcon={Filter} />
-          <Button label="New Class" classname="justify-center w-[100%]" onPress={openAdd} />
+          {/* <Button LeftIcon={Filter} /> */}
+          <Button label="New Class" onPress={openAdd} />
         </View>
 
         {/* Column headings */}
@@ -272,7 +265,7 @@ export default function Classes() {
                   </Text>
 
                   <Text className="font-inter text-[10px] font-normal text-muted">
-                    {enrolledLabel(classItem)}
+                    {`${classItem.student_count} students enrolled`}
                   </Text>
                 </View>
 

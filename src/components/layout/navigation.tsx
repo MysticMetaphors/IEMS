@@ -106,8 +106,8 @@ function Navigation() {
             width={41}
             style={{
               position: "absolute",
-              left: -40,
-              bottom: 0.5,
+              left: -40.1,
+              bottom: -0.7,
               color: "#DFDFDF",
             }}
           />

@@ -16,6 +16,7 @@ export async function resetDatabase(): Promise<void> {
 
   await db.withTransactionAsync(async () => {
     await db.execAsync(`
+      DROP TABLE IF EXISTS class_sessions;
       DROP TABLE IF EXISTS class_enrollments;
       DROP TABLE IF EXISTS classes;
       DROP TABLE IF EXISTS students;
