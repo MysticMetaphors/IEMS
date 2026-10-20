@@ -2,9 +2,11 @@ import Button from "@/components/button";
 import type { ClassItem } from "@/components/ui/class-drawer";
 import DatetimePickerField from "@/components/ui/datetime-picker";
 import Drawer from "@/components/ui/drawer";
+import type { AttendanceStatus, SessionAttendanceRow } from "@/db/classes/attendance";
 import type { ClassSessionRow, SessionStatus } from "@/db/classes/sessions";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import AttendanceDropdown from "../attendanceDropdown";
 
 export type SessionItem = ClassSessionRow;
 export type SessionDrawerMode = "add" | "edit" | "view";
@@ -26,9 +28,17 @@ type SessionDrawerProps = {
   /** Optional prefill when adding (e.g. the grid cell the user tapped). */
   defaultStart?: Date;
   defaultClassId?: string;
+  /** Roster of the session (enrolled students + their attendance). */
+  attendance?: SessionAttendanceRow[];
+  attendanceLoading?: boolean;
+  /** A student's attendance was changed (saved right away by the parent). */
+  onAttendanceChange?: (studentId: string, status: AttendanceStatus) => void;
+  /** Mark every student that has no attendance yet as present. */
+  onMarkAllPresent?: () => void;
   onClose: () => void;
   onCreate: (input: SessionFormPayload) => void;
   onUpdate: (input: SessionFormPayload & { id: SessionItem["id"] }) => void;
+  onStatusChange?: (status: SessionStatus) => void;
   onEdit: () => void;
   onDelete: () => void;
   isSaving: boolean;
@@ -53,6 +63,14 @@ const TITLES: Record<SessionDrawerMode, string> = {
 
 const STATUSES: SessionStatus[] = ["scheduled", "completed", "cancelled"];
 const HOUR_MS = 60 * 60 * 1000;
+
+// Attendance: "• Present" -> the dot carries the color
+export const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string; color: string }[] = [
+  { value: "present", label: "Present", color: "#16A34A" }, // green
+  { value: "absent", label: "Absent", color: "#DC2626" }, // red
+  { value: "late", label: "Late", color: "#F59E0B" }, // amber
+  { value: "excused", label: "Excused", color: "#3B82F6" }, // blue
+];
 
 function nextFullHour() {
   const d = new Date();
@@ -104,13 +122,31 @@ function Radio({ checked }: { checked: boolean }) {
   );
 }
 
-export default function SessionDrawer({ open, mode, initial, classes, defaultStart, defaultClassId, onClose, onCreate, onUpdate, onEdit, onDelete, isSaving, saveError }: SessionDrawerProps) {
+export default function SessionDrawer({
+  open,
+  mode,
+  initial,
+  classes,
+  defaultStart,
+  defaultClassId,
+  attendance = [],
+  attendanceLoading = false,
+  onAttendanceChange,
+  onMarkAllPresent,
+  onClose,
+  onCreate,
+  onUpdate,
+  onStatusChange,
+  onEdit,
+  onDelete,
+  isSaving,
+  saveError,
+}: SessionDrawerProps) {
   const readOnly = mode === "view";
   const editable = !readOnly && !isSaving;
   const [form, setForm] = useState<FormState>(() =>
     buildFormState(initial, defaultStart, defaultClassId)
   );
-
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -127,6 +163,9 @@ export default function SessionDrawer({ open, mode, initial, classes, defaultSta
     () => classes.filter((c) => !readOnly || c.id === form.classId),
     [classes, readOnly, form.classId]
   );
+
+  const markedCount = useMemo(() => attendance.filter((r) => r.status).length, [attendance]);
+  const hasUnmarked = markedCount < attendance.length;
 
   function handleStartChange(next: Date) {
     setForm((prev) => {
@@ -193,15 +232,26 @@ export default function SessionDrawer({ open, mode, initial, classes, defaultSta
 
           {/* Right side */}
           <View className="flex-row items-center gap-[16px]">
-            <Pressable
-              disabled={isSaving}
-              onPress={onClose}
-              className="items-center py-2 px-[12px]"
-            >
-              <Text className="font-inter-semibold text-[12px] text-muted">
-                {readOnly ? "Close" : "Cancel"}
-              </Text>
-            </Pressable>
+            {readOnly && (
+              <Button
+                label="Close"
+                onPress={onClose}
+                disabled={isSaving}
+                classname={`${readOnly ? "px-[17px] rounded-[12px] h-[44px] bg-black flex flex-row gap-[8px] items-center w-fit text-white" : ""}`}
+              />
+            )}
+
+            {!readOnly && (
+              <Pressable
+                disabled={isSaving}
+                onPress={onClose}
+                className="items-center py-2 px-[12px]"
+              >
+                <Text className={`font-inter-semibold text-[12px] text-muted`}>
+                  Cancel
+                </Text>
+              </Pressable>
+            )}
 
             {!readOnly && (
               <Button
@@ -285,21 +335,26 @@ export default function SessionDrawer({ open, mode, initial, classes, defaultSta
           disabled={!editable}
           onChange={(d) => set("date", d)}
         />
-        <View className="grid grid-cols-2 gap-[16px]">
-          <DatetimePickerField
-            label="Start Time *"
-            mode="time"
-            value={form.start}
-            disabled={!editable}
-            onChange={handleStartChange}
-          />
-          <DatetimePickerField
-            label="End Time *"
-            mode="time"
-            value={form.end}
-            disabled={!editable}
-            onChange={(d) => set("end", d)}
-          />
+        <View className="flex-row gap-4">
+          <View className="flex-1">
+            <DatetimePickerField
+              label="Start Time *"
+              mode="time"
+              value={form.start}
+              disabled={!editable}
+              onChange={handleStartChange}
+            />
+          </View>
+
+          <View className="flex-1">
+            <DatetimePickerField
+              label="End Time *"
+              mode="time"
+              value={form.end}
+              disabled={!editable}
+              onChange={(d) => set("end", d)}
+            />
+          </View>
         </View>
 
         {/* Status (only meaningful once the session exists) */}
@@ -312,10 +367,14 @@ export default function SessionDrawer({ open, mode, initial, classes, defaultSta
                 return (
                   <Pressable
                     key={status}
-                    disabled={!editable}
-                    onPress={() => set("status", status)}
+                    disabled={isSaving}
+                    onPress={() => {
+                      set("status", status);
+                      // view mode has no Save button, so save right away
+                      if (readOnly && status !== form.status) onStatusChange?.(status);
+                    }}
                     className={`flex-1 items-center rounded-[12px] border py-[11px] ${isSelected ? "border-foreground bg-card" : "border-border"
-                      } ${!editable && !isSelected ? "opacity-40" : ""}`}
+                      } ${isSaving && !isSelected ? "opacity-40" : ""}`}
                   >
                     <Text
                       className={`font-inter-semibold text-[12px] capitalize ${isSelected ? "text-foreground" : "text-muted"
@@ -326,6 +385,58 @@ export default function SessionDrawer({ open, mode, initial, classes, defaultSta
                   </Pressable>
                 );
               })}
+            </View>
+          </View>
+        )}
+
+        {/* Attendance (only once the session exists). Tap a student to change the status. */}
+        {mode !== "add" && initial && (
+          <View className="gap-[8px]">
+            <View className="flex-row items-center justify-between">
+              <Text className="font-inter-semibold text-[12px]">
+                Attendance{" "}
+                <Text className="font-inter text-[12px] text-muted">
+                  ({markedCount}/{attendance.length})
+                </Text>
+              </Text>
+
+              {hasUnmarked && onMarkAllPresent ? (
+                <Pressable onPress={onMarkAllPresent}>
+                  <Text className="font-inter-semibold text-[12px] text-muted">Mark all present</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            <View className="rounded-[12px] border border-border">
+              {attendanceLoading ? (
+                <Text className="font-inter text-[12px] text-muted text-center py-5">Loading...</Text>
+              ) : attendance.length === 0 ? (
+                <Text className="font-inter text-[12px] text-muted text-center py-5">
+                  No students enrolled in this class.
+                </Text>
+              ) : (
+                <ScrollView nestedScrollEnabled className="max-h-[300px]">
+                  {attendance.map((row, index) => (
+                    <View
+                      key={row.student_id}
+                      className={`flex-row items-center justify-between gap-[12px] px-[14px] py-[10px] ${index > 0 ? "border-t border-border" : ""
+                        }`}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        className="flex-1 font-inter-semibold text-[12px] text-foreground"
+                      >
+                        {row.student_name}
+                      </Text>
+
+                      <AttendanceDropdown
+                        value={row.status}
+                        onChange={(status) => onAttendanceChange?.(row.student_id, status)}
+                      />
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
             </View>
           </View>
         )}

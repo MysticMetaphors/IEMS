@@ -288,17 +288,19 @@ export default function Students() {
                   </View>
                 </View>
 
-                <Menu
-                  items={[
-                    { label: "View Details", onPress: () => openDrawer("view", student) },
-                    { label: "Edit Student", onPress: () => openDrawer("edit", student) },
-                    {
-                      label: "Delete",
-                      type: "destructive",
-                      onPress: () => requestDelete(student),
-                    },
-                  ]}
-                />
+                <View className="items-center justify-center self-center">
+                  <Menu
+                    items={[
+                      { label: "View Details", onPress: () => openDrawer("view", student) },
+                      { label: "Edit Student", onPress: () => openDrawer("edit", student) },
+                      {
+                        label: "Delete",
+                        type: "destructive",
+                        onPress: () => requestDelete(student),
+                      },
+                    ]}
+                  />
+                </View>
               </View>
             ))
           )}
@@ -338,9 +340,9 @@ export default function Students() {
               {filtered.length === 0
                 ? "No results"
                 : `Showing students ${startIndex + 1}–${Math.min(
-                    endIndex,
-                    filtered.length
-                  )} of ${filtered.length}`}
+                  endIndex,
+                  filtered.length
+                )} of ${filtered.length}`}
             </Text>
           </View>
         )}

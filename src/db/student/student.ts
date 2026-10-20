@@ -32,8 +32,23 @@ export async function createStudent(input: StudentInput) {
   return id;
 }
 
-export async function getStudents() {
+export async function getStudents(search?: string) {
   const db = await getDatabase();
+
+  const query = `
+    SELECT id, custom_id, name, email, phone, notes
+    FROM students
+    WHERE deleted_at IS NULL
+      AND (
+        ? IS NULL
+        OR id LIKE '%' || ? || '%'
+        OR name LIKE '%' || ? || '%'
+        OR custom_id LIKE '%' || ? || '%'
+      )
+    ORDER BY name COLLATE NOCASE ASC
+  `;
+
+  const searchTerm = search?.trim() || null;
 
   return db.getAllAsync<{
     id: string;
@@ -42,12 +57,12 @@ export async function getStudents() {
     email: string | null;
     phone: string | null;
     notes: string | null;
-  }>(
-    `SELECT id, custom_id, name, email, phone, notes
-     FROM students
-     WHERE deleted_at IS NULL
-     ORDER BY name COLLATE NOCASE ASC`
-  );
+  }>(query, [
+    searchTerm,
+    searchTerm,
+    searchTerm,
+    searchTerm,
+  ]);
 }
 
 export async function updateStudent(input: StudentInput & { id: string }) {

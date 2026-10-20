@@ -89,7 +89,7 @@ function Navigation() {
   });
 
   return (
-    <View className="bg-white relative pt-[15px] pb-[50px] px-[41px] flex flex-row items-center justify-center gap-[14px] border-t border-[#DFDFDF]">
+    <View className="bg-white relative pt-[15px] pb-[50px] px-[41px] flex flex-row items-center justify-center gap-[14px] border-t border-border">
       <Animated.View
         pointerEvents={isAssistant ? "none" : "auto"}
         style={{

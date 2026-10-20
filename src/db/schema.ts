@@ -67,6 +67,22 @@ CREATE TABLE IF NOT EXISTS class_sessions (
   CHECK (ends_at > starts_at)
 );
 
+CREATE TABLE IF NOT EXISTS attendance (
+  id TEXT PRIMARY KEY NOT NULL,
+  owner_id TEXT,
+  session_id TEXT NOT NULL REFERENCES class_sessions(id),
+  student_id TEXT NOT NULL REFERENCES students(id),
+  status TEXT NOT NULL
+    CHECK (status IN ('present', 'absent', 'late', 'excused')),
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  deleted_at TEXT,
+  sync_status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (sync_status IN ('pending', 'synced', 'conflict')),
+  UNIQUE (session_id, student_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_students_name
   ON students(name);
 
@@ -96,6 +112,9 @@ CREATE INDEX IF NOT EXISTS idx_sessions_class_start
 
 CREATE INDEX IF NOT EXISTS idx_sessions_sync
   ON class_sessions(sync_status, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_student
+  ON attendance(student_id, session_id);
 `;
 
 

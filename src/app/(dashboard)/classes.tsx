@@ -213,6 +213,8 @@ export default function Classes() {
     }
   };
 
+  const [studentId, setStudentId] = useState<string | null>(null);
+
   return (
     <>
       <ScrollView
@@ -268,18 +270,19 @@ export default function Classes() {
                     {`${classItem.student_count} students enrolled`}
                   </Text>
                 </View>
-
-                <Menu
-                  items={[
-                    { label: "View Details", onPress: () => void openExisting("view", classItem) },
-                    { label: "Edit Class", onPress: () => void openExisting("edit", classItem) },
-                    {
-                      label: "Delete",
-                      type: "destructive",
-                      onPress: () => requestDelete(classItem),
-                    },
-                  ]}
-                />
+                <View className="items-center justify-center self-center">
+                  <Menu
+                    items={[
+                      { label: "View Details", onPress: () => void openExisting("view", classItem) },
+                      { label: "Edit Class", onPress: () => void openExisting("edit", classItem) },
+                      {
+                        label: "Delete",
+                        type: "destructive",
+                        onPress: () => requestDelete(classItem),
+                      },
+                    ]}
+                  />
+                </View>
               </View>
             ))
           )}

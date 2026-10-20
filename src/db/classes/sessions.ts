@@ -188,6 +188,23 @@ export async function updateClassSession(
   );
 }
 
+// Change only the status (no need to resend the whole session).
+export async function updateClassSessionStatus(id: string, status: SessionStatus) {
+  const db = await getDatabase();
+  const now = new Date().toISOString();
+
+  await db.runAsync(
+    `UPDATE class_sessions
+     SET status = ?,
+         updated_at = ?,
+         sync_status = 'pending'
+     WHERE id = ? AND deleted_at IS NULL`,
+    status,
+    now,
+    id
+  );
+}
+
 // Soft delete so the change can still sync.
 export async function deleteClassSession(id: string) {
   const db = await getDatabase();

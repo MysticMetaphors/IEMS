@@ -63,9 +63,8 @@ const INPUT_CLASS =
 function Checkbox({ checked }: { checked: boolean }) {
   return (
     <View
-      className={`h-[20px] w-[20px] items-center justify-center rounded-[6px] border ${
-        checked ? "bg-foreground border-foreground" : "bg-white border-border"
-      }`}
+      className={`h-[20px] w-[20px] items-center justify-center rounded-[6px] border ${checked ? "bg-foreground border-foreground" : "bg-white border-border"
+        }`}
     >
       {checked ? <Text className="text-[12px] leading-[14px] text-white">✓</Text> : null}
     </View>
@@ -182,15 +181,26 @@ export default function ClassDrawer({
 
           {/* Right side */}
           <View className="flex-row items-center gap-[16px]">
-            <Pressable
-              disabled={isSaving}
-              onPress={onClose}
-              className="items-center py-2 px-[12px]"
-            >
-              <Text className="font-inter-semibold text-[12px] text-muted">
-                {readOnly ? "Close" : "Cancel"}
-              </Text>
-            </Pressable>
+            {readOnly && (
+              <Button
+                label="Close"
+                onPress={onClose}
+                disabled={isSaving}
+                classname={`${readOnly ? "px-[17px] rounded-[12px] h-[44px] bg-black flex flex-row gap-[8px] items-center w-fit text-white" : ""}`}
+              />
+            )}
+
+            {!readOnly && (
+              <Pressable
+                disabled={isSaving}
+                onPress={onClose}
+                className="items-center py-2 px-[12px]"
+              >
+                <Text className={`font-inter-semibold text-[12px] text-muted`}>
+                  Cancel
+                </Text>
+              </Pressable>
+            )}
 
             {!readOnly && (
               <Button
@@ -255,14 +265,12 @@ export default function ClassDrawer({
                     key={status}
                     disabled={!editable}
                     onPress={() => set("status", status)}
-                    className={`flex-1 items-center rounded-[12px] border py-[11px] ${
-                      isSelected ? "border-foreground bg-card" : "border-border"
-                    } ${!editable && !isSelected ? "opacity-40" : ""}`}
+                    className={`flex-1 items-center rounded-[12px] border py-[11px] ${isSelected ? "border-foreground bg-card" : "border-border"
+                      } ${!editable && !isSelected ? "opacity-40" : ""}`}
                   >
                     <Text
-                      className={`font-inter-semibold text-[12px] capitalize ${
-                        isSelected ? "text-foreground" : "text-muted"
-                      }`}
+                      className={`font-inter-semibold text-[12px] capitalize ${isSelected ? "text-foreground" : "text-muted"
+                        }`}
                     >
                       {status}
                     </Text>
@@ -293,7 +301,7 @@ export default function ClassDrawer({
             )}
           </View>
 
-          {!readOnly && students.length > 0 && (
+          {!readOnly && students.length >= 10 && (
             <TextInput
               value={form.studentSearch}
               onChangeText={(v) => set("studentSearch", v)}
@@ -324,9 +332,8 @@ export default function ClassDrawer({
                       onPress={() => toggleStudent(student.id)}
                       accessibilityRole="checkbox"
                       accessibilityState={{ checked, disabled: !editable }}
-                      className={`flex-row items-center gap-[12px] px-[14px] py-[12px] ${
-                        index > 0 ? "border-t border-border" : ""
-                      }`}
+                      className={`flex-row items-center gap-[12px] px-[14px] py-[12px] ${index > 0 ? "border-t border-border" : ""
+                        }`}
                     >
                       <Checkbox checked={checked} />
                       <View className="flex-1">
