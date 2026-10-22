@@ -31,6 +31,7 @@ type SessionDrawerProps = {
   /** Roster of the session (enrolled students + their attendance). */
   attendance?: SessionAttendanceRow[];
   attendanceLoading?: boolean;
+  showActions?: boolean;
   /** A student's attendance was changed (saved right away by the parent). */
   onAttendanceChange?: (studentId: string, status: AttendanceStatus) => void;
   /** Mark every student that has no attendance yet as present. */
@@ -131,6 +132,7 @@ export default function SessionDrawer({
   defaultClassId,
   attendance = [],
   attendanceLoading = false,
+  showActions,
   onAttendanceChange,
   onMarkAllPresent,
   onClose,
@@ -218,7 +220,7 @@ export default function SessionDrawer({
         <View className="flex-1 flex-row items-center justify-between gap-[16px]">
           {/* Left side */}
           <View className="flex-row items-center gap-[8px]">
-            {readOnly && (
+            {readOnly || showActions && (
               <>
                 <Pressable onPress={onEdit} className="items-center py-2 px-[12px]">
                   <Text className="font-inter-semibold text-[12px] text-muted">Edit</Text>
