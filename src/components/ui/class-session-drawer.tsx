@@ -132,7 +132,7 @@ export default function SessionDrawer({
   defaultClassId,
   attendance = [],
   attendanceLoading = false,
-  showActions,
+  showActions = true,
   onAttendanceChange,
   onMarkAllPresent,
   onClose,
@@ -220,7 +220,7 @@ export default function SessionDrawer({
         <View className="flex-1 flex-row items-center justify-between gap-[16px]">
           {/* Left side */}
           <View className="flex-row items-center gap-[8px]">
-            {readOnly || showActions && (
+            {readOnly && showActions && (
               <>
                 <Pressable onPress={onEdit} className="items-center py-2 px-[12px]">
                   <Text className="font-inter-semibold text-[12px] text-muted">Edit</Text>

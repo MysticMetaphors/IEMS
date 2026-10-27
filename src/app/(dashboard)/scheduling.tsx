@@ -360,6 +360,8 @@ export default function Scheduling() {
           onSessionPress={openView}
           onSlotPress={openAdd}
         />
+
+        
       </ScrollView>
 
       <SessionDrawer
@@ -370,6 +372,7 @@ export default function Scheduling() {
         defaultStart={defaultStart}
         attendance={attendance}
         attendanceLoading={attendanceLoading}
+        showActions={true}
         onAttendanceChange={handleAttendanceChange}
         onMarkAllPresent={handleMarkAllPresent}
         onClose={closeDrawer}
