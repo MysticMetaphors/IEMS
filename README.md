@@ -1,56 +1,179 @@
-# Welcome to your Expo app 👋
+# IEMS
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+IEMS is a mobile application that lets independent educators (for example, ESL teachers) manage their schedule and students **offline**, without juggling multiple pieces of software.
 
-## Get started
+Built with [Expo](https://expo.dev) (SDK 55), React Native 0.83, Expo Router, NativeWind (Tailwind CSS) and a local SQLite database, so your data stays on the device.
 
-1. Install dependencies
+<img width="3184" height="1823" alt="Aquatics (1) 3" src="https://github.com/user-attachments/assets/ad1c85b8-30f2-4860-8c05-e99d5d73f42e" />
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
+## Table of Contents
 
-   ```bash
-   npx expo start
-   ```
+- [Tech Stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Running on a Device or Emulator](#running-on-a-device-or-emulator)
+- [Available Scripts](#available-scripts)
+- [Project Structure](#project-structure)
+- [Building with EAS](#building-with-eas)
+- [Troubleshooting](#troubleshooting)
 
-In the output, you'll find options to open the app in a
+---
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Tech Stack
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+| Area | Technology |
+| --- | --- |
+| Framework | Expo SDK 55, React 19.2, React Native 0.83 |
+| Language | TypeScript 5.9 |
+| Navigation | Expo Router (file-based routing), React Navigation bottom tabs |
+| Styling | NativeWind 4 + Tailwind CSS 3 |
+| Local storage | `expo-sqlite` |
+| Notifications | `expo-notifications`, `expo-background-task`, `expo-task-manager` |
+| Animations | `react-native-reanimated`, `react-native-gesture-handler` |
+| Builds | EAS Build (`eas.json`) |
 
-## Get a fresh project
+---
 
-When you're ready, run:
+## Prerequisites
+
+Install the following before you begin:
+
+1. **Node.js** (current LTS; 20.19 or newer recommended) and **npm**
+2. **Git**
+3. For running on a device or emulator, one or more of:
+   - **Android:** [Android Studio](https://developer.android.com/studio) with an emulator, or a physical Android phone with USB debugging enabled
+   - **iOS (macOS only):** Xcode with an iOS simulator, or a physical iPhone
+4. *(Optional)* An [Expo account](https://expo.dev/signup) and EAS CLI if you want cloud builds
+
+---
+
+## Quick Start
 
 ```bash
-npm run reset-project
+# 1. Clone the repository
+git clone https://github.com/MysticMetaphors/IEMS.git
+cd IEMS
+
+# 2. Install dependencies
+npm install
+
+# 3. Start the development server
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+The terminal will show a QR code and shortcuts for opening the app on Android, iOS, or web.
 
-### Other setup steps
+> IEMS stores its data locally on the device with SQLite, so there is no backend or database server to set up.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+---
 
-## Learn more
+## Running on a Device or Emulator
 
-To learn more about developing your project with Expo, look at the following resources:
+IEMS uses native modules (notifications, background tasks, SQLite, dev client), so it should be run as a **development build** rather than in Expo Go, which only includes a limited set of bundled native modules.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Option A: Local development build
 
-## Join the community
+```bash
+# Android (emulator running, or phone connected by USB)
+npm run android
 
-Join our community of developers creating universal apps.
+# iOS (macOS only)
+npm run ios
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+The first run generates the native `android/` / `ios/` folders and compiles the app, which can take several minutes. Later runs are much faster.
+
+Once the development build is installed, you can start Metro on its own and reopen the app any time:
+
+```bash
+npx expo start --dev-client
+```
+
+### Option B: Cloud development build with EAS
+
+If you don't want to install Android Studio or Xcode:
+
+```bash
+npm install -g eas-cli
+eas login
+eas build --profile development --platform android   # or ios
+```
+
+Install the resulting build on your device, then run `npx expo start --dev-client` and scan the QR code.
+
+### Notifications permission
+
+On Android 13+, the app requests the notification permission (`POST_NOTIFICATIONS`) so it can remind you about lessons. Accept the prompt on first launch to receive reminders.
+
+---
+
+## Available Scripts
+
+| Command | Description |
+| --- | --- |
+| `npm start` | Start the Expo dev server |
+| `npm run android` | Build and run the app on Android (`expo run:android`) |
+| `npm run ios` | Build and run the app on iOS (`expo run:ios`) |
+| `npm run web` | Start the app in a web browser |
+| `npm run lint` | Lint the project with Expo's ESLint setup |
+| `npx tsc --noEmit` | Type-check the project |
+| `npx expo-doctor` | Diagnose dependency and config issues |
+| `npx expo install --fix` | Fix packages that don't match the installed SDK |
+
+> **Adding packages:** use `npx expo install <package>` instead of `npm install <package>` so Expo picks a version compatible with the current SDK.
+
+---
+
+## Project Structure
+
+```
+IEMS/
+├── src/                 # Application source (screens, components, logic)
+│   └── app/             # Expo Router routes: each file is a screen
+├── assets/              # Images, icons, splash assets
+├── scripts/             # Helper scripts
+├── app.json             # Expo app configuration and plugins
+├── eas.json             # EAS Build profiles
+├── babel.config.js      # Babel configuration
+├── metro.config.js      # Metro bundler configuration
+├── tailwind.config.js   # Tailwind / NativeWind theme
+├── tsconfig.json        # TypeScript configuration
+└── package.json
+```
+
+Routes live in `src/app/`. Keep non-route code (components, hooks, utilities) outside that folder.
+
+---
+
+## Building with EAS
+
+Build profiles are defined in `eas.json`:
+
+| Profile | Purpose |
+| --- | --- |
+| `development` | Development client, distributed internally |
+| `preview` | Internal-distribution test build |
+| `production` | Store build with auto-incrementing version |
+
+```bash
+npm install -g eas-cli
+eas login
+
+eas build --profile preview --platform android
+eas build --profile production --platform android
+```
+
+The Android application ID is `com.iems`.
+
+---
+
+## Troubleshooting
+
+- **Metro cache problems or odd red-screen errors:** run `npx expo start --clear`.
+- **Dependency version warnings:** run `npx expo install --fix`, then `npx expo-doctor`.
+- **App opens in Expo Go and a native module is missing:** use a development build (see above).
+- **Android build fails after changing plugins or native config:** regenerate native folders with `npx expo prebuild --clean`.
+- **Phone can't reach the dev server:** make sure the phone and computer are on the same Wi-Fi network, or use `npx expo start --tunnel`.
+- **NativeWind classes not applying:** restart with `npx expo start --clear` after editing `tailwind.config.js`.
