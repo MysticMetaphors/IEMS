@@ -14,10 +14,11 @@ import {
   type AttendanceStatus,
   type SessionAttendanceRow,
 } from "@/db/classes/attendance";
-import { getClassSessions, type ClassSessionRow } from "@/db/classes/sessions";
+import { getClassSessionsPage, type ClassSessionRow } from "@/db/classes/sessions";
+import { usePagedList } from "@/hooks/use-paged-list";
 import { getDisplayStatus, type DisplaySessionStatus } from "@/lib/utils/session-status";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
@@ -60,9 +61,20 @@ const errorMessage = (e: unknown) =>
   e instanceof Error ? e.message : "Something went wrong. Please try again.";
 
 export default function Attendance() {
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [sessions, setSessions] = useState<ClassSessionRow[]>([]);
+  // Newest session first. Only the current page is loaded; search and paging happen in SQLite.
+  const {
+    rows: sessions,
+    total,
+    page,
+    setPage,
+    totalPages,
+    startIndex,
+    endIndex,
+    search,
+    setSearch,
+    loading,
+    reload,
+  } = usePagedList(getClassSessionsPage, PAGE_SIZE);
 
   // "now" decides which scheduled sessions are missed; refreshed every minute
   const [now, setNow] = useState(() => Date.now());
@@ -78,14 +90,19 @@ export default function Attendance() {
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
 
-  // newest session first; refreshed every time the screen is shown
+  // Reload the current page every time the screen is shown again. The first focus is
+  // skipped because the list already loads itself when the screen mounts.
+  const hasBeenFocused = useRef(false);
   useFocusEffect(
     useCallback(() => {
       setNow(Date.now());
-      getClassSessions()
-        .then((rows) => setSessions([...rows].reverse()))
-        .catch(console.error);
-    }, [])
+
+      if (hasBeenFocused.current) {
+        reload();
+      } else {
+        hasBeenFocused.current = true;
+      }
+    }, [reload])
   );
 
   // load the roster whenever a session is opened
@@ -164,28 +181,6 @@ export default function Attendance() {
     }
   }
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter(
-      (s) =>
-        s.class_name.toLowerCase().includes(q) || (s.title ?? "").toLowerCase().includes(q)
-    );
-  }, [sessions, search]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const startIndex = (page - 1) * PAGE_SIZE;
-  const endIndex = startIndex + PAGE_SIZE;
-  const paginated = filtered.slice(startIndex, endIndex);
-
-  const handleSearch = (text: string) => {
-    setSearch(text);
-    setPage(1);
-  };
-
-  const isFirst = page === 1;
-  const isLast = page >= totalPages;
-
   return (
     <>
       <ScrollView
@@ -195,7 +190,7 @@ export default function Attendance() {
         contentContainerClassName="gap-[18px] pb-[200px]"
       >
         <View className="flex flex-row gap-[10px] max-w-full">
-          <SearchInput value={search} onChangeText={handleSearch} className="flex-1" />
+          <SearchInput value={search} onChangeText={setSearch} className="flex-1" />
           <Button LeftIcon={Filter} />
         </View>
 
@@ -205,12 +200,12 @@ export default function Attendance() {
         </View>
 
         <View className="flex gap-[10px]">
-          {paginated.length === 0 ? (
+          {loading ? null : sessions.length === 0 ? (
             <Text className="font-inter text-[12px] text-muted text-center py-6">
               No sessions found
             </Text>
           ) : (
-            paginated.map((session) => {
+            sessions.map((session) => {
               const { Icon, bg, badge } = STATUS_STYLE[getDisplayStatus(session, now)];
 
               return (
@@ -264,7 +259,7 @@ export default function Attendance() {
           <Pagination
             page={page}
             totalPages={totalPages}
-            totalItems={filtered.length}
+            totalItems={total}
             startIndex={startIndex}
             endIndex={endIndex}
             itemLabel="sessions"

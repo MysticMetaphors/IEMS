@@ -6,10 +6,11 @@ import Menu from "@/components/ui/menu";
 import Modal from "@/components/ui/modal";
 import Pagination from "@/components/ui/pagination";
 import type { Student } from "@/components/ui/student-drawer";
-import { createClass, deleteClass, getClasses, updateClass } from "@/db/classes/classes";
+import { createClass, deleteClass, getClassById, getClassesPage, updateClass } from "@/db/classes/classes";
 import { getEnrollmentsByClass, syncClassEnrollments } from "@/db/classes/enrollment";
 import { getStudents } from "@/db/student/student";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePagedList } from "@/hooks/use-paged-list";
+import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
@@ -30,10 +31,26 @@ type DeleteState = {
 };
 
 export default function Classes() {
-  const [classes, setClasses] = useState<ClassItem[]>([]);
+  // Only the current page is loaded; search and paging happen in SQLite.
+  const {
+    rows: classes,
+    total,
+    page,
+    setPage,
+    totalPages,
+    startIndex,
+    endIndex,
+    search,
+    setSearch,
+    loading,
+    error: listError,
+    reload,
+    retry,
+    reset,
+  } = usePagedList(getClassesPage, PAGE_SIZE);
+
+  // Students feed the enroll checklist and are loaded when a drawer opens, not up front.
   const [students, setStudents] = useState<Student[]>([]);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
 
   const [drawer, setDrawer] = useState<DrawerState>({
     open: false,
@@ -48,56 +65,14 @@ export default function Classes() {
     classItem: null,
   });
 
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Classes and students are loaded together (students feed the enroll checklist).
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setLoadError("");
-
-      const [classResult, studentResult] = await Promise.all([getClasses(), getStudents()]);
-      setClasses(classResult);
-      setStudents(studentResult);
-    } catch (err) {
-      console.error("Failed to load classes:", err);
-      setLoadError("Unable to load classes. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
-
-  // Search by class name, subject, or the enrolled student's name.
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    if (!query) return classes;
-
-    return classes.filter((classItem) =>
-      `${classItem.name} ${classItem.subject ?? ""} ${classItem.name ?? ""}`
-        .toLowerCase()
-        .includes(query)
-    );
-  }, [search, classes]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const startIndex = (page - 1) * PAGE_SIZE;
-  const endIndex = startIndex + PAGE_SIZE;
-  const paginated = filtered.slice(startIndex, endIndex);
-
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    setPage(1);
-  };
+  const errorMessage =
+    loadError || (listError ? "Unable to load classes. Please try again." : "");
 
   // ---- Drawer controls ----
   const fetchRosterIds = async (classId: string) => {
@@ -105,17 +80,31 @@ export default function Classes() {
     return roster.filter((e) => e.status === "active").map((e) => e.student_id);
   };
 
-  const openAdd = () => {
-    setSaveError(null);
-    setDrawerStudentIds([]);
-    setDrawer({ open: true, mode: "add", classItem: null });
+  // The drawer needs every student for its checklist, so they load here, when it opens.
+  const openAdd = async () => {
+    try {
+      setSaveError(null);
+      setStudents(await getStudents());
+      setDrawerStudentIds([]);
+      setDrawer({ open: true, mode: "add", classItem: null });
+    } catch (err) {
+      console.error("Failed to load students:", err);
+      setLoadError("Unable to load the students. Please try again.");
+    }
   };
 
   // View / edit need the current roster so the checkboxes start in the right state.
   const openExisting = async (mode: "view" | "edit", classItem: ClassItem) => {
     try {
       setSaveError(null);
-      setDrawerStudentIds(await fetchRosterIds(classItem.id));
+
+      const [rosterIds, studentOptions] = await Promise.all([
+        fetchRosterIds(classItem.id),
+        getStudents(),
+      ]);
+
+      setStudents(studentOptions);
+      setDrawerStudentIds(rosterIds);
       setDrawer({ open: true, mode, classItem });
     } catch (err) {
       console.error("Failed to load class roster:", err);
@@ -156,9 +145,8 @@ export default function Classes() {
       const id = await createClass(fields);
       await syncClassEnrollments(id, studentIds);
 
-      setClasses(await getClasses());
-      setSearch("");
-      setPage(1);
+      // Show the first page with no search so the new class is visible.
+      reset();
       setDrawer((prev) => ({ ...prev, open: false }));
     } catch (err) {
       console.error("Failed to create class:", err);
@@ -177,11 +165,12 @@ export default function Classes() {
       await updateClass({ id, ...fields });
       await syncClassEnrollments(id, studentIds);
 
-      const result = await getClasses();
-      setClasses(result);
+      // Reload the current page, and read the saved class directly because a rename
+      // can move it to a different page.
+      reload();
+      const updated = await getClassById(id);
 
       // Go back to the details view showing the fresh data.
-      const updated = result.find((c) => c.id === id) ?? null;
       setDrawerStudentIds(studentIds);
       setDrawer({ open: true, mode: "view", classItem: updated });
     } catch (err) {
@@ -202,8 +191,8 @@ export default function Classes() {
 
       await deleteClass(classItem.id);
 
-      setClasses(await getClasses());
       setPage(1);
+      reload();
       setDeleteState((prev) => ({ ...prev, open: false }));
     } catch (err) {
       console.error("Failed to delete class:", err);
@@ -225,9 +214,9 @@ export default function Classes() {
       >
         {/* Search and create */}
         <View className="flex flex-row gap-[10px] max-w-full">
-          <SearchInput value={search} onChangeText={handleSearch} className="flex-1" />
+          <SearchInput value={search} onChangeText={setSearch} className="flex-1" />
           {/* <Button LeftIcon={Filter} /> */}
-          <Button label="New Class" onPress={openAdd} />
+          <Button label="New Class" onPress={() => void openAdd()} />
         </View>
 
         {/* Column headings */}
@@ -243,20 +232,25 @@ export default function Classes() {
               <ActivityIndicator />
               <Text className="font-inter text-[12px] text-muted mt-2">Loading classes...</Text>
             </View>
-          ) : loadError && classes.length === 0 ? (
+          ) : errorMessage && classes.length === 0 ? (
             <View className="items-center gap-3 py-6">
-              <Text className="font-inter text-[12px] text-muted text-center">{loadError}</Text>
+              <Text className="font-inter text-[12px] text-muted text-center">{errorMessage}</Text>
 
-              <Pressable onPress={() => void loadData()}>
+              <Pressable
+                onPress={() => {
+                  setLoadError("");
+                  retry();
+                }}
+              >
                 <Text className="font-inter-semibold text-[12px]">Try again</Text>
               </Pressable>
             </View>
-          ) : paginated.length === 0 ? (
+          ) : classes.length === 0 ? (
             <Text className="font-inter text-[12px] text-muted text-center py-6">
               {search.trim() ? "No classes found" : "No classes yet. Add your first class."}
             </Text>
           ) : (
-            paginated.map((classItem) => (
+            classes.map((classItem) => (
               <View
                 key={classItem.id}
                 className="px-[16px] py-[13px] flex flex-row justify-between items-center rounded-[12px] border border-border bg-card"
@@ -293,7 +287,7 @@ export default function Classes() {
           <Pagination
             page={page}
             totalPages={totalPages}
-            totalItems={filtered.length}
+            totalItems={total}
             startIndex={startIndex}
             endIndex={endIndex}
             itemLabel="classes"
