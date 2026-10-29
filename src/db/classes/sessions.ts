@@ -1,5 +1,12 @@
 import { createId } from './../ids';
 import { getDatabase } from './../index';
+import {
+  containsPattern,
+  LIKE_ESCAPE,
+  pageBounds,
+  type Page,
+  type PageRequest,
+} from './../pagination';
 
 export type SessionStatus = 'scheduled' | 'completed' | 'cancelled';
 
@@ -126,6 +133,49 @@ export async function getClassSessions(
      ORDER BY s.starts_at ASC`,
     ...params
   );
+}
+
+/**
+ * One page of sessions, newest first, plus the total that match `search`
+ * (class name or session title). Used by the Attendance list, which would
+ * otherwise have to load every session ever recorded.
+ */
+export async function getClassSessionsPage(
+  request: PageRequest
+): Promise<Page<ClassSessionRow>> {
+  const db = await getDatabase();
+  const { limit, offset } = pageBounds(request);
+
+  const where = ['s.deleted_at IS NULL', 'c.deleted_at IS NULL'];
+  const params: (string | number)[] = [];
+
+  const pattern = containsPattern(request.search);
+  if (pattern) {
+    where.push(`(c.name LIKE ? ${LIKE_ESCAPE} OR s.title LIKE ? ${LIKE_ESCAPE})`);
+    params.push(pattern, pattern);
+  }
+
+  const fromSql = `FROM class_sessions s
+     INNER JOIN classes c ON c.id = s.class_id
+     WHERE ${where.join(' AND ')}`;
+
+  const [rows, countRow] = await Promise.all([
+    db.getAllAsync<ClassSessionRow>(
+      `SELECT
+         s.id, s.class_id, c.name AS class_name, c.custom_id AS class_custom_id,
+         s.title, s.starts_at, s.ends_at, s.color, s.status
+       ${fromSql}
+       ORDER BY s.starts_at DESC, s.id DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    ),
+    db.getFirstAsync<{ total: number }>(
+      `SELECT COUNT(*) AS total ${fromSql}`,
+      params
+    ),
+  ]);
+
+  return { rows, total: countRow?.total ?? 0 };
 }
 
 export async function getClassSessionById(id: string) {

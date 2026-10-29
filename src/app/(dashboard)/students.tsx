@@ -8,8 +8,9 @@ import StudentDrawer, { DrawerMode, Student, StudentFormPayload } from "@/compon
 // import { ResetDatabaseButton } from "@/db/refresh-database/button";
 import { getClasses } from "@/db/classes/classes";
 import { getEnrollmentsByStudent, syncStudentEnrollments } from "@/db/classes/enrollment";
-import { createStudent, deleteStudent, getStudents, updateStudent } from "@/db/student/student";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createStudent, deleteStudent, getStudentById, getStudentsPage, updateStudent } from "@/db/student/student";
+import { usePagedList } from "@/hooks/use-paged-list";
+import { useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
@@ -33,9 +34,23 @@ type DeleteState = {
 };
 
 export default function Students() {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  // Only the current page is loaded; search and paging happen in SQLite.
+  const {
+    rows: students,
+    total,
+    page,
+    setPage,
+    totalPages,
+    startIndex,
+    endIndex,
+    search,
+    setSearch,
+    loading,
+    error: listError,
+    reload,
+    retry,
+    reset,
+  } = usePagedList(getStudentsPage, PAGE_SIZE);
 
   const [drawer, setDrawer] = useState<DrawerState>({
     open: false,
@@ -48,73 +63,38 @@ export default function Students() {
     student: null,
   });
 
-  // Classes feed the enroll checklist; drawerClassIds is the shown student's current classes.
+  // Classes feed the enroll checklist and are loaded when a drawer opens, not up front.
+  // drawerClassIds is the shown student's current classes.
   const [classes, setClasses] = useState<Awaited<ReturnType<typeof getClasses>>>([]);
   const [drawerClassIds, setDrawerClassIds] = useState<string[]>([]);
 
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Load students through the existing database helper.
-  const loadStudents = useCallback(async () => {
-    try {
-      setLoading(true);
-      setLoadError("");
-
-      const [result, classResult] = await Promise.all([getStudents(), getClasses()]);
-      setStudents(result);
-      setClasses(classResult);
-    } catch (err) {
-      console.error("Failed to load students:", err);
-      setLoadError("Unable to load students. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadStudents();
-  }, [loadStudents]);
-
-  // Search by name or email.
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    if (!query) return students;
-
-    return students.filter(
-      (student) =>
-        student.name.toLowerCase().includes(query) ||
-        student.email?.toLowerCase().includes(query)
-    );
-  }, [search, students]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const startIndex = (page - 1) * PAGE_SIZE;
-  const endIndex = startIndex + PAGE_SIZE;
-  const paginated = filtered.slice(startIndex, endIndex);
-
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    setPage(1);
-  };
+  const errorMessage =
+    loadError || (listError ? "Unable to load students. Please try again." : "");
 
   // ---- Drawer controls ----
-  // Existing students need their current classes loaded so the checkboxes start correct.
+  // The drawer needs every class for its checklist, plus (for an existing student) the
+  // classes they are in so the checkboxes start correct. Both load here, when it opens.
   const openDrawer = async (mode: DrawerMode, student: Student | null = null) => {
     setSaveError(null);
 
     try {
-      if (student) {
-        const enrollments = await getEnrollmentsByStudent(student.id);
-        setDrawerClassIds(enrollments.filter((e) => e.status === "active").map((e) => e.class_id));
-      } else {
-        setDrawerClassIds([]);
-      }
+      const [classOptions, enrollments] = await Promise.all([
+        getClasses(),
+        student ? getEnrollmentsByStudent(student.id) : Promise.resolve(null),
+      ]);
+
+      setClasses(classOptions);
+      setDrawerClassIds(
+        enrollments
+          ? enrollments.filter((e) => e.status === "active").map((e) => e.class_id)
+          : []
+      );
       setDrawer({ open: true, mode, student });
     } catch (err) {
       console.error("Failed to load student classes:", err);
@@ -155,10 +135,8 @@ export default function Students() {
       const id = await createStudent(fields);
       await syncStudentEnrollments(id, classIds);
 
-      // Refresh from SQLite so the UI reflects persisted records.
-      setStudents(await getStudents());
-      setSearch("");
-      setPage(1);
+      // Show the first page with no search so the new student is visible.
+      reset();
       setDrawer((prev) => ({ ...prev, open: false }));
     } catch (err) {
       console.error("Failed to create student:", err);
@@ -177,11 +155,12 @@ export default function Students() {
       await updateStudent({ id, ...fields });
       await syncStudentEnrollments(id, classIds);
 
-      const result = await getStudents();
-      setStudents(result);
+      // Reload the current page, and read the saved student directly because a rename
+      // can move them to a different page.
+      reload();
+      const updated = await getStudentById(id);
 
       // Go back to the details view showing the fresh data.
-      const updated = result.find((s) => s.id === id) ?? null;
       setDrawerClassIds(classIds);
       setDrawer({ open: true, mode: "view", student: updated });
     } catch (err) {
@@ -202,8 +181,8 @@ export default function Students() {
 
       await deleteStudent(student.id);
 
-      setStudents(await getStudents());
       setPage(1);
+      reload();
       setDeleteState((prev) => ({ ...prev, open: false }));
     } catch (err) {
       console.error("Failed to delete student:", err);
@@ -228,7 +207,7 @@ export default function Students() {
         <View className="flex flex-row gap-[10px] max-w-full">
           <SearchInput
             value={search}
-            onChangeText={handleSearch}
+            onChangeText={setSearch}
             className="flex-1"
           />
 
@@ -254,24 +233,29 @@ export default function Students() {
                 Loading students...
               </Text>
             </View>
-          ) : loadError && students.length === 0 ? (
+          ) : errorMessage && students.length === 0 ? (
             <View className="items-center gap-3 py-6">
               <Text className="font-inter text-[12px] text-muted text-center">
-                {loadError}
+                {errorMessage}
               </Text>
 
-              <Pressable onPress={() => void loadStudents()}>
+              <Pressable
+                onPress={() => {
+                  setLoadError("");
+                  retry();
+                }}
+              >
                 <Text className="font-inter-semibold text-[12px]">Try again</Text>
               </Pressable>
             </View>
-          ) : paginated.length === 0 ? (
+          ) : students.length === 0 ? (
             <Text className="font-inter text-[12px] text-muted text-center py-6">
               {search.trim()
                 ? "No students found"
                 : "No students yet. Add your first student."}
             </Text>
           ) : (
-            paginated.map((student) => (
+            students.map((student) => (
               <View
                 key={student.id}
                 className="px-[16px] py-[13px] flex flex-row justify-between items-center rounded-[12px] border border-border bg-card"
@@ -337,12 +321,12 @@ export default function Students() {
             </View>
 
             <Text className="font-inter-semibold text-[12px]">
-              {filtered.length === 0
+              {total === 0
                 ? "No results"
                 : `Showing students ${startIndex + 1}–${Math.min(
                   endIndex,
-                  filtered.length
-                )} of ${filtered.length}`}
+                  total
+                )} of ${total}`}
             </Text>
           </View>
         )}
