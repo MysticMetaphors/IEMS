@@ -1,3 +1,5 @@
+// Frozen baseline (migration version 1). Do not edit: schema changes go in a new
+// entry in ./migrations.ts, otherwise they never reach existing installs.
 export const DATABASE_SCHEMA = `
 PRAGMA foreign_keys = ON;
 
