@@ -5,13 +5,14 @@ import ClassDrawer, { ClassDrawerMode, ClassFormPayload, ClassItem } from "@/com
 import Menu from "@/components/ui/menu";
 import Modal from "@/components/ui/modal";
 import Pagination from "@/components/ui/pagination";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import type { Student } from "@/components/ui/student-drawer";
 import { createClass, deleteClass, getClassById, getClassesPage, updateClass } from "@/db/classes/classes";
 import { getEnrollmentsByClass, syncClassEnrollments } from "@/db/classes/enrollment";
 import { getStudents } from "@/db/student/student";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
 
@@ -228,10 +229,7 @@ export default function Classes() {
         {/* Class list */}
         <View className="flex gap-[10px]">
           {loading ? (
-            <View className="items-center py-6">
-              <ActivityIndicator />
-              <Text className="font-inter text-[12px] text-muted mt-2">Loading classes...</Text>
-            </View>
+            <ListSkeleton label="Loading classes" />
           ) : errorMessage && classes.length === 0 ? (
             <View className="items-center gap-3 py-6">
               <Text className="font-inter text-[12px] text-muted text-center">{errorMessage}</Text>

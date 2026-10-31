@@ -6,6 +6,7 @@ import Warning from "@/assets/icons/status/warning.svg";
 import KPI from "@/components/dashboard/KPI";
 import type { ClassItem } from "@/components/ui/class-drawer";
 import SessionDrawer from "@/components/ui/class-session-drawer";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import {
   getSessionAttendance,
   saveAttendance,
@@ -162,6 +163,11 @@ export default function Overview() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // True only until the first load finishes, so skeletons show instead of the
+  // empty states ("No classes today", zero counts) that would be wrong at that point.
+  // Later refreshes keep the current content on screen.
+  const [loading, setLoading] = useState(true);
+
   // session drawer (view only: no edit / delete)
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selected, setSelected] = useState<ClassSessionRow | null>(null);
@@ -191,7 +197,10 @@ export default function Overview() {
   // refreshed every time the dashboard is shown
   useFocusEffect(
     useCallback(() => {
-      load().catch(console.error);
+      // Also ends the skeletons if the first load fails, so they never spin forever.
+      load()
+        .catch(console.error)
+        .finally(() => setLoading(false));
     }, [load])
   );
 
@@ -308,6 +317,7 @@ export default function Overview() {
         contentContainerClassName="gap-[18px] pb-[200px]"
       >
         <KPI
+          loading={loading}
           completedThisMonth={summary.thisMonth}
           completedLastMonth={summary.lastMonth}
           totalClasses={totalClasses}
@@ -317,13 +327,17 @@ export default function Overview() {
         {/* Today's classes */}
         <View className="flex flex-row items-center justify-between h-fit w-full">
           <Text className="font-inter-semibold text-[12px]">Today's Classes {" "}
-            <Text className="font-inter text-[12px] text-muted">({todaySessions.length})</Text>
+            {loading ? null : (
+              <Text className="font-inter text-[12px] text-muted">({todaySessions.length})</Text>
+            )}
           </Text>
           <Link href={'/(dashboard)/scheduling'} className="font-inter-semibold text-[12px] underline">View all</Link>
         </View>
 
         <View className="flex gap-[10px]">
-          {todaySessions.length === 0 ? (
+          {loading ? (
+            <ListSkeleton count={2} leading label="Loading today's classes" />
+          ) : todaySessions.length === 0 ? (
             <Text className="font-inter text-[12px] text-muted text-center py-6">
               No classes today
             </Text>
@@ -370,12 +384,16 @@ export default function Overview() {
         <View className="flex flex-row items-center justify-between h-fit w-full">
           <Text className="font-inter-semibold text-[12px]">
             Class Issues{" "}
-            <Text className="font-inter text-[12px] text-muted">({issues.length})</Text>
+            {loading ? null : (
+              <Text className="font-inter text-[12px] text-muted">({issues.length})</Text>
+            )}
           </Text>
         </View>
 
         <View className="flex gap-[10px]">
-          {shownIssues.length === 0 ? (
+          {loading ? (
+            <ListSkeleton count={3} leading label="Loading class issues" />
+          ) : shownIssues.length === 0 ? (
             <Text className="font-inter text-[12px] text-muted text-center py-6">
               No issues. Everything is up to date.
             </Text>

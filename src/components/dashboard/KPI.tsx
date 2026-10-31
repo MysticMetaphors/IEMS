@@ -1,7 +1,13 @@
 import Attendance from "@/assets/icons/sidebar/attendance.svg";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Text, View } from "react-native";
 
+// Placeholder color on the brown card (translucent white, like the card's text)
+const ON_PRIMARY = "rgba(255,255,255,0.3)";
+
 type KPIProps = {
+  /** True until the first load finishes: the numbers show as placeholders. */
+  loading?: boolean;
   /** Completed classes this calendar month. */
   completedThisMonth: number;
   /** Completed classes last calendar month. */
@@ -31,6 +37,7 @@ function getChange(current: number, previous: number) {
 const CARD = "rounded-[12px] border border-border bg-card px-[16px] py-[14px]";
 
 export default function KPI({
+  loading = false,
   completedThisMonth,
   completedLastMonth,
   totalClasses,
@@ -58,17 +65,36 @@ export default function KPI({
           />
         </View>
         <View className="flex flex-row items-center justify-between">
-          <Text className="text-white font-inter-semibold text-4xl">
-            {completedThisMonth}
-          </Text>
-          <View>
-            <Text className="text-white text-[10px]">
-              {change.label}
-            </Text>
-            <Text className="text-white font-inter-semibold text-[10px]">
-              {change.value}
-            </Text>
-          </View>
+          {loading ? (
+            // same height as the 4xl number, so nothing jumps when the real value arrives
+            <View
+              accessible
+              accessibilityLabel="Loading completed classes"
+              accessibilityState={{ busy: true }}
+              className="flex-1 flex-row items-center justify-between"
+              style={{ minHeight: 40 }}
+            >
+              <Skeleton width={56} height={32} radius={8} color={ON_PRIMARY} />
+              <View className="gap-[6px] items-start">
+                <Skeleton width={64} height={10} color={ON_PRIMARY} />
+                <Skeleton width={48} height={10} color={ON_PRIMARY} />
+              </View>
+            </View>
+          ) : (
+            <>
+              <Text className="text-white font-inter-semibold text-4xl">
+                {completedThisMonth}
+              </Text>
+              <View>
+                <Text className="text-white text-[10px]">
+                  {change.label}
+                </Text>
+                <Text className="text-white font-inter-semibold text-[10px]">
+                  {change.value}
+                </Text>
+              </View>
+            </>
+          )}
         </View>
       </View>
 

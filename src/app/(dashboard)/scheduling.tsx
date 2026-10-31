@@ -65,6 +65,9 @@ export default function Scheduling() {
 
   const [sessions, setSessions] = useState<ClassSessionRow[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
+  // True only until the first load finishes. Changing the date or view later keeps the
+  // grid on screen (the query takes a few milliseconds), so it does not flash placeholders.
+  const [loading, setLoading] = useState(true);
 
   // drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -108,7 +111,10 @@ export default function Scheduling() {
   // refresh when the screen is shown or the view / date changes
   useFocusEffect(
     useCallback(() => {
-      load().catch(console.error);
+      // Also ends the placeholders if the first load fails, so they never stay forever.
+      load()
+        .catch(console.error)
+        .finally(() => setLoading(false));
     }, [load])
   );
 
@@ -357,6 +363,7 @@ export default function Scheduling() {
           view={view}
           date={filterDate}
           sessions={sessions}
+          loading={loading}
           onSessionPress={openView}
           onSlotPress={openAdd}
         />
