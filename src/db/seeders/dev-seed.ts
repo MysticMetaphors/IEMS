@@ -18,16 +18,57 @@ export const SEED_DAYS = 7;
 /** How many classes each student is enrolled in. */
 export const CLASSES_PER_STUDENT = 5;
 
-// The teacher's daily timetable. A session can't overlap another one (the app
-// rejects it), so every class shares these slots: [hour, minute] in local time.
+// The teacher's daily timetable: [hour, minute] start times in local time, and how
+// long every session lasts. Edit these two to change the schedule.
+//
+// A session can't overlap another one (the app rejects it), so every class shares
+// these slots and each start must be at least SESSION_MINUTES after the one before.
+// validateTimetable() below throws a clear error if they don't fit.
 const DAILY_SLOTS: [number, number][] = [
   [9, 0],
-  [10, 30],
+  [11, 0],
   [13, 0],
-  [14, 30],
-  [16, 0],
+  [15, 0],
+  [17, 0],
 ];
-const SESSION_MINUTES = 60;
+const SESSION_MINUTES = 120;
+
+const clock = (minutes: number) =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** Throws if the slots overlap, run past midnight or hold values that aren't times. */
+export function validateTimetable(slots: [number, number][], sessionMinutes: number) {
+  if (!Number.isInteger(sessionMinutes) || sessionMinutes <= 0) {
+    throw new Error(`SESSION_MINUTES must be a positive whole number (got ${sessionMinutes}).`);
+  }
+
+  const starts = slots
+    .map(([hour, minute]) => {
+      if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        throw new Error(`DAILY_SLOTS has an invalid time: [${hour}, ${minute}].`);
+      }
+      return hour * 60 + minute;
+    })
+    .sort((a, b) => a - b);
+
+  for (let i = 1; i < starts.length; i++) {
+    if (starts[i] < starts[i - 1] + sessionMinutes) {
+      throw new Error(
+        `Seed timetable overlaps: ${clock(starts[i - 1])}-${clock(starts[i - 1] + sessionMinutes)} ` +
+          `and ${clock(starts[i])}-${clock(starts[i] + sessionMinutes)}. ` +
+          `Start slots at least ${sessionMinutes} minutes apart, or shorten SESSION_MINUTES.`
+      );
+    }
+  }
+
+  const last = starts[starts.length - 1];
+  if (last !== undefined && last + sessionMinutes > 24 * 60) {
+    throw new Error(
+      `The last seed session (${clock(last)}-${clock(last + sessionMinutes)}) runs past midnight. ` +
+        `Start it earlier or shorten SESSION_MINUTES.`
+    );
+  }
+}
 
 type StudentSeed = { name: string; email: string; phone: string; notes: string };
 type ClassSeed = { name: string; subject: string; description: string };
@@ -87,6 +128,8 @@ const ATTENDANCE_CYCLE: AttendanceStatus[] = [
 const customId = (year: number, n: number) => `${year}${String(n).padStart(3, '0')}`;
 
 export function buildSeedData(now: Date = new Date()) {
+  validateTimetable(DAILY_SLOTS, SESSION_MINUTES);
+
   const nowIso = now.toISOString();
   const year = now.getFullYear();
 
@@ -171,14 +214,17 @@ export async function seedDatabase() {
     throw new Error('Seeding is only available in development.');
   }
 
+  // Build (and validate) the data BEFORE deleting anything, so a mistake in the
+  // timetable above throws without wiping the database first.
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const data = buildSeedData(now);
+
   // Start from an empty database so the seed never collides with existing rows
   // (custom ids are unique) and running it twice gives the same result.
   await resetDatabase();
 
   const db = await getDatabase();
-  const now = new Date();
-  const nowIso = now.toISOString();
-  const data = buildSeedData(now);
 
   // One transaction: either everything is seeded or nothing is.
   await db.withTransactionAsync(async () => {
