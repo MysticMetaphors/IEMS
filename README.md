@@ -118,6 +118,8 @@ On Android 13+, the app requests the notification permission (`POST_NOTIFICATION
 | `npm run ios` | Build and run the app on iOS (`expo run:ios`) |
 | `npm run web` | Start the app in a web browser |
 | `npm run lint` | Lint the project with Expo's ESLint setup |
+| `npm run db:reset` | Development only: delete all local data on a connected Android device or emulator running a development build |
+| `npm run db:seed` | Development only: delete all local data, then fill the database with sample students, classes, enrollments and sessions starting today (same device requirements) |
 | `npx tsc --noEmit` | Type-check the project |
 | `npx expo-doctor` | Diagnose dependency and config issues |
 | `npx expo install --fix` | Fix packages that don't match the installed SDK |
