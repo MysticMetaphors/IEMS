@@ -7,6 +7,7 @@ import Button from "@/components/button";
 import SearchInput from "@/components/search-input";
 import AttendanceDrawer from "@/components/ui/attendance-drawer";
 import Pagination from "@/components/ui/pagination";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import {
   getSessionAttendance,
   saveAttendance,
@@ -200,7 +201,9 @@ export default function Attendance() {
         </View>
 
         <View className="flex gap-[10px]">
-          {loading ? null : sessions.length === 0 ? (
+          {loading ? (
+            <ListSkeleton leading label="Loading class sessions" />
+          ) : sessions.length === 0 ? (
             <Text className="font-inter text-[12px] text-muted text-center py-6">
               No sessions found
             </Text>

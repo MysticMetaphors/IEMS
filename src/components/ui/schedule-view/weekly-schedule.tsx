@@ -1,3 +1,4 @@
+import { Skeleton } from "@/components/ui/skeleton";
 import type { ClassSessionRow } from "@/db/classes/sessions";
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -48,6 +49,18 @@ const MONTHS = [
 ];
 
 const EMPTY_SESSIONS: ClassSessionRow[] = [];
+
+// Placeholder session blocks shown while the first load runs: [start hour, length in hours]
+// per day column. Fixed (not random) so the grid does not shuffle between renders.
+const SKELETON_BLOCKS: [number, number][][] = [
+  [[9, 1.5], [13, 1]],
+  [[10, 2]],
+  [[8, 1], [14, 1.5]],
+  [[11, 1]],
+  [[9, 1], [15, 2]],
+  [[12, 1.5]],
+  [[10, 1]],
+];
 
 const formatHour = (h: number) => {
   const suffix = h < 12 ? "AM" : "PM";
@@ -286,6 +299,8 @@ type Props = {
   date?: Date;
   /** Sessions to plot (fetch the same range with getClassSessions). */
   sessions?: ClassSessionRow[];
+  /** True until the first load finishes: shows placeholder blocks and ignores slot taps. */
+  loading?: boolean;
   /** Tap on a session card. */
   onSessionPress?: (session: ClassSessionRow) => void;
   /** Tap on an empty hour slot -> receives that day at that hour. */
@@ -296,6 +311,7 @@ export default function WeeklySchedule({
   view = "week",
   date,
   sessions = EMPTY_SESSIONS,
+  loading = false,
   onSessionPress,
   onSlotPress,
 }: Props) {
@@ -438,7 +454,7 @@ export default function WeeklySchedule({
                 >
                   {/* One touch area per column; the hour comes from the touch position */}
                   <Pressable
-                    disabled={!onSlotPress}
+                    disabled={!onSlotPress || loading}
                     onPress={(e) => {
                       const hour = Math.min(
                         23,
@@ -450,6 +466,24 @@ export default function WeeklySchedule({
                     }}
                     style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
                   />
+
+                  {/* First load: placeholder blocks where sessions will appear */}
+                  {loading
+                    ? SKELETON_BLOCKS[dayIndex % SKELETON_BLOCKS.length].map(([hour, hours]) => (
+                        <Skeleton
+                          key={hour}
+                          radius={8}
+                          width="auto"
+                          height={hours * HOUR_HEIGHT - 4}
+                          style={{
+                            position: "absolute",
+                            top: hour * HOUR_HEIGHT + 2,
+                            left: 4,
+                            right: 4,
+                          }}
+                        />
+                      ))
+                    : null}
 
                   {/* Sessions, drawn on top of the grid */}
                   {columns[dayIndex].map((placed) => (

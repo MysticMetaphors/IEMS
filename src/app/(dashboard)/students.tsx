@@ -4,6 +4,7 @@ import Button from "@/components/button";
 import SearchInput from "@/components/search-input";
 import Menu from "@/components/ui/menu";
 import Modal from "@/components/ui/modal";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import StudentDrawer, { DrawerMode, Student, StudentFormPayload } from "@/components/ui/student-drawer";
 // import { ResetDatabaseButton } from "@/db/refresh-database/button";
 import { getClasses } from "@/db/classes/classes";
@@ -11,7 +12,7 @@ import { getEnrollmentsByStudent, syncStudentEnrollments } from "@/db/classes/en
 import { createStudent, deleteStudent, getStudentById, getStudentsPage, updateStudent } from "@/db/student/student";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
 
@@ -227,12 +228,7 @@ export default function Students() {
         {/* Student list */}
         <View className="flex gap-[10px]">
           {loading ? (
-            <View className="items-center py-6">
-              <ActivityIndicator />
-              <Text className="font-inter text-[12px] text-muted mt-2">
-                Loading students...
-              </Text>
-            </View>
+            <ListSkeleton label="Loading students" />
           ) : errorMessage && students.length === 0 ? (
             <View className="items-center gap-3 py-6">
               <Text className="font-inter text-[12px] text-muted text-center">
