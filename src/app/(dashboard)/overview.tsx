@@ -7,13 +7,6 @@ import KPI from "@/components/dashboard/KPI";
 import type { ClassItem } from "@/components/ui/class-drawer";
 import SessionDrawer from "@/components/ui/class-session-drawer";
 import { ListSkeleton } from "@/components/ui/skeleton";
-import {
-  getSessionAttendance,
-  saveAttendance,
-  saveSessionAttendance,
-  type AttendanceStatus,
-  type SessionAttendanceRow,
-} from "@/db/classes/attendance";
 import { getClasses } from "@/db/classes/classes";
 import {
   getCompletedClassSummary,
@@ -22,12 +15,11 @@ import {
 } from "@/db/classes/dashboard";
 import {
   getClassSessions,
-  updateClassSessionStatus,
-  type ClassSessionRow,
-  type SessionStatus,
+  type ClassSessionRow
 } from "@/db/classes/sessions";
+import { useSessionAttendance } from "@/hooks/use-session-attendance";
 import { Link, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 // TODO: replace with real counts when ready
@@ -143,7 +135,6 @@ function IssueRow({
             ))}
           </View>
 
-          {/* open the session to fix it (mark attendance / status) */}
           <Pressable
             onPress={onOpen}
             className="items-center rounded-[10px] border border-border bg-white py-[9px]"
@@ -163,18 +154,18 @@ export default function Overview() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // True only until the first load finishes, so skeletons show instead of the
-  // empty states ("No classes today", zero counts) that would be wrong at that point.
-  // Later refreshes keep the current content on screen.
-  const [loading, setLoading] = useState(true);
-
-  // session drawer (view only: no edit / delete)
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selected, setSelected] = useState<ClassSessionRow | null>(null);
-  const [attendance, setAttendance] = useState<SessionAttendanceRow[]>([]);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
+  const {
+    drawerOpen, setDrawerOpen, selected, attendance, attendanceLoading,
+    openSession, handleAttendanceChange, handleMarkAllPresent, handleStatusChange,
+  } = useSessionAttendance({
+    setError: setDrawerError,
+    onSaved: () => load().catch(console.error),
+    onStatusApplied: (id, status) =>
+      setTodaySessions((rows) => rows.map((r) => (r.id === id ? { ...r, status } : r))),
+  });
 
+  const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     const now = new Date();
     const dayStart = startOfDay(now);
@@ -194,116 +185,13 @@ export default function Overview() {
     setClasses(classRows);
   }, []);
 
-  // refreshed every time the dashboard is shown
   useFocusEffect(
     useCallback(() => {
-      // Also ends the skeletons if the first load fails, so they never spin forever.
       load()
         .catch(console.error)
         .finally(() => setLoading(false));
     }, [load])
   );
-
-  // load the roster whenever a session is opened in the drawer
-  useEffect(() => {
-    if (!drawerOpen || !selected) {
-      setAttendance([]);
-      return;
-    }
-
-    let cancelled = false;
-    setAttendanceLoading(true);
-
-    getSessionAttendance(selected.id)
-      .then((rows) => {
-        if (!cancelled) setAttendance(rows);
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (!cancelled) setAttendanceLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [drawerOpen, selected?.id]);
-
-  function openSession(session: ClassSessionRow) {
-    setSelected(session);
-    setDrawerError(null);
-    setDrawerOpen(true);
-  }
-
-  // Saved right away; the dashboard refreshes so issues disappear once fixed.
-  async function handleAttendanceChange(studentId: string, status: AttendanceStatus) {
-    if (!selected) return;
-
-    const previous = attendance.find((r) => r.student_id === studentId)?.status ?? null;
-    setDrawerError(null);
-    setAttendance((rows) =>
-      rows.map((r) => (r.student_id === studentId ? { ...r, status } : r))
-    );
-
-    try {
-      await saveAttendance({ session_id: selected.id, student_id: studentId, status });
-      load().catch(console.error);
-    } catch (e) {
-      setAttendance((rows) =>
-        rows.map((r) => (r.student_id === studentId ? { ...r, status: previous } : r))
-      );
-      setDrawerError(errorMessage(e));
-    }
-  }
-
-  // Only students without attendance yet; existing marks are left alone.
-  async function handleMarkAllPresent() {
-    if (!selected) return;
-
-    const unmarkedIds = attendance.filter((r) => !r.status).map((r) => r.student_id);
-    if (unmarkedIds.length === 0) return;
-
-    const ids = new Set(unmarkedIds);
-    setDrawerError(null);
-    setAttendance((rows) =>
-      rows.map((r) => (ids.has(r.student_id) ? { ...r, status: "present" } : r))
-    );
-
-    try {
-      await saveSessionAttendance(
-        selected.id,
-        unmarkedIds.map((student_id) => ({ student_id, status: "present" as const }))
-      );
-      load().catch(console.error);
-    } catch (e) {
-      setAttendance((rows) =>
-        rows.map((r) => (ids.has(r.student_id) ? { ...r, status: null } : r))
-      );
-      setDrawerError(errorMessage(e));
-    }
-  }
-
-  // Session status (scheduled / completed / cancelled) saved right away.
-  async function handleStatusChange(status: SessionStatus) {
-    if (!selected) return;
-    const { id } = selected;
-    const previous = selected.status;
-
-    // update the drawer and the list right away, roll back if saving fails
-    const apply = (s: SessionStatus) => {
-      setSelected((prev) => (prev ? { ...prev, status: s } : prev));
-      setTodaySessions((rows) => rows.map((r) => (r.id === id ? { ...r, status: s } : r)));
-    };
-
-    setDrawerError(null);
-    apply(status);
-    try {
-      await updateClassSessionStatus(id, status);
-      load().catch(console.error);
-    } catch (e) {
-      apply(previous);
-      setDrawerError(errorMessage(e));
-    }
-  }
 
   const issueBySession = useMemo(() => new Map(issues.map((i) => [i.id, i])), [issues]);
   const shownIssues = issues.slice(0, MAX_ISSUES);
@@ -411,7 +299,6 @@ export default function Overview() {
         </View>
       </ScrollView>
 
-      {/* Same drawer as the Scheduling page, but view only (no edit / delete) */}
       <SessionDrawer
         open={drawerOpen}
         mode="view"

@@ -8,15 +8,9 @@ import SearchInput from "@/components/search-input";
 import AttendanceDrawer from "@/components/ui/attendance-drawer";
 import Pagination from "@/components/ui/pagination";
 import { ListSkeleton } from "@/components/ui/skeleton";
-import {
-  getSessionAttendance,
-  saveAttendance,
-  saveSessionAttendance,
-  type AttendanceStatus,
-  type SessionAttendanceRow,
-} from "@/db/classes/attendance";
-import { getClassSessionsPage, type ClassSessionRow } from "@/db/classes/sessions";
+import { getClassSessionsPage } from "@/db/classes/sessions";
 import { usePagedList } from "@/hooks/use-paged-list";
+import { useSessionAttendance } from "@/hooks/use-session-attendance";
 import { getDisplayStatus, type DisplaySessionStatus } from "@/lib/utils/session-status";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,11 +21,9 @@ const PAGE_SIZE = 10;
 type StatusStyle = {
   Icon: typeof Present;
   bg: string;
-  /** small label next to the title (only for statuses that need attention) */
   badge?: { label: string; bg: string; text: string };
 };
 
-// scheduled -> gray, completed -> green, missed -> red, cancelled -> gray + label
 const STATUS_STYLE: Record<DisplaySessionStatus, StatusStyle> = {
   scheduled: { Icon: Not_Tagged, bg: "bg-gray-500/30" },
   completed: { Icon: Present, bg: "bg-green-500/30" },
@@ -58,41 +50,21 @@ const formatTimeRange = (startIso: string, endIso: string) => {
   return `${fmt(startIso)}–${fmt(endIso)}`;
 };
 
-const errorMessage = (e: unknown) =>
-  e instanceof Error ? e.message : "Something went wrong. Please try again.";
-
 export default function Attendance() {
-  // Newest session first. Only the current page is loaded; search and paging happen in SQLite.
-  const {
-    rows: sessions,
-    total,
-    page,
-    setPage,
-    totalPages,
-    startIndex,
-    endIndex,
-    search,
-    setSearch,
-    loading,
-    reload,
+  const { rows: sessions, total, page, setPage, totalPages, startIndex, endIndex, search, setSearch, loading, reload,
   } = usePagedList(getClassSessionsPage, PAGE_SIZE);
-
-  // "now" decides which scheduled sessions are missed; refreshed every minute
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  // attendance drawer
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selected, setSelected] = useState<ClassSessionRow | null>(null);
-  const [attendance, setAttendance] = useState<SessionAttendanceRow[]>([]);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
+  const {
+    drawerOpen, setDrawerOpen, selected, attendance, attendanceLoading,
+    openSession, handleAttendanceChange, handleMarkAllPresent,
+  } = useSessionAttendance({ setError: setDrawerError });
 
-  // Reload the current page every time the screen is shown again. The first focus is
-  // skipped because the list already loads itself when the screen mounts.
   const hasBeenFocused = useRef(false);
   useFocusEffect(
     useCallback(() => {
@@ -105,82 +77,6 @@ export default function Attendance() {
       }
     }, [reload])
   );
-
-  // load the roster whenever a session is opened
-  useEffect(() => {
-    if (!drawerOpen || !selected) {
-      setAttendance([]);
-      return;
-    }
-
-    let cancelled = false;
-    setAttendanceLoading(true);
-
-    getSessionAttendance(selected.id)
-      .then((rows) => {
-        if (!cancelled) setAttendance(rows);
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (!cancelled) setAttendanceLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [drawerOpen, selected?.id]);
-
-  function openSession(session: ClassSessionRow) {
-    setSelected(session);
-    setDrawerError(null);
-    setDrawerOpen(true);
-  }
-
-  // Saved right away. The row updates immediately and rolls back if saving fails.
-  async function handleAttendanceChange(studentId: string, status: AttendanceStatus) {
-    if (!selected) return;
-
-    const previous = attendance.find((r) => r.student_id === studentId)?.status ?? null;
-    setDrawerError(null);
-    setAttendance((rows) =>
-      rows.map((r) => (r.student_id === studentId ? { ...r, status } : r))
-    );
-
-    try {
-      await saveAttendance({ session_id: selected.id, student_id: studentId, status });
-    } catch (e) {
-      setAttendance((rows) =>
-        rows.map((r) => (r.student_id === studentId ? { ...r, status: previous } : r))
-      );
-      setDrawerError(errorMessage(e));
-    }
-  }
-
-  // Only students without attendance yet; existing marks are left alone.
-  async function handleMarkAllPresent() {
-    if (!selected) return;
-
-    const unmarkedIds = attendance.filter((r) => !r.status).map((r) => r.student_id);
-    if (unmarkedIds.length === 0) return;
-
-    const ids = new Set(unmarkedIds);
-    setDrawerError(null);
-    setAttendance((rows) =>
-      rows.map((r) => (ids.has(r.student_id) ? { ...r, status: "present" } : r))
-    );
-
-    try {
-      await saveSessionAttendance(
-        selected.id,
-        unmarkedIds.map((student_id) => ({ student_id, status: "present" as const }))
-      );
-    } catch (e) {
-      setAttendance((rows) =>
-        rows.map((r) => (ids.has(r.student_id) ? { ...r, status: null } : r))
-      );
-      setDrawerError(errorMessage(e));
-    }
-  }
 
   return (
     <>

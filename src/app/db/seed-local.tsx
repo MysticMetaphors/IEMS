@@ -1,9 +1,8 @@
-import { seedDatabase } from "@/db/seeders/dev-seed";
+import { seedDatabase } from "@/db/scripts/dev-seed";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 
-// Opened by `npm run db:seed` (see package.json). Development builds only.
 export default function SeedDatabaseRoute() {
   const router = useRouter();
   const { confirm } = useLocalSearchParams<{ confirm?: string }>();

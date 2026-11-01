@@ -10,26 +10,18 @@ import WeeklySchedule, {
   type ScheduleView,
 } from "@/components/ui/schedule-view/weekly-schedule";
 import SegmentedTabs from "@/components/ui/segmented-tabs";
-import {
-  getSessionAttendance,
-  saveAttendance,
-  saveSessionAttendance,
-  type AttendanceStatus,
-  type SessionAttendanceRow,
-} from "@/db/classes/attendance";
 import { getClasses } from "@/db/classes/classes";
 import {
   createClassSession,
   deleteClassSession,
   getClassSessions,
-  SessionStatus,
   updateClassSession,
-  updateClassSessionStatus,
-  type ClassSessionRow,
+  type ClassSessionRow
 } from "@/db/classes/sessions";
+import { useSessionAttendance } from "@/hooks/use-session-attendance";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 const TABS = [{ label: "Day" }, { label: "Week" }];
@@ -57,7 +49,6 @@ const errorMessage = (e: unknown) =>
   e instanceof Error ? e.message : "Something went wrong. Please try again.";
 
 export default function Scheduling() {
-  // view + filter date
   const [activeTab, setActiveTab] = useState("Day");
   const [filterDate, setFilterDate] = useState<Date>(() => startOfDay(new Date()));
   const [showIosPicker, setShowIosPicker] = useState(false);
@@ -65,21 +56,20 @@ export default function Scheduling() {
 
   const [sessions, setSessions] = useState<ClassSessionRow[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
-  // True only until the first load finishes. Changing the date or view later keeps the
-  // grid on screen (the query takes a few milliseconds), so it does not flash placeholders.
   const [loading, setLoading] = useState(true);
 
-  // drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<SessionDrawerMode>("add");
-  const [selected, setSelected] = useState<ClassSessionRow | null>(null);
   const [defaultStart, setDefaultStart] = useState<Date | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  // attendance of the opened session
-  const [attendance, setAttendance] = useState<SessionAttendanceRow[]>([]);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const {
+    drawerOpen, setDrawerOpen, selected, setSelected, attendance, attendanceLoading,
+    handleAttendanceChange, handleMarkAllPresent, handleStatusChange,
+  } = useSessionAttendance({
+    setError: setSaveError,
+    onStatusApplied: (id, status) =>
+      setSessions((rows) => rows.map((r) => (r.id === id ? { ...r, status } : r))),
+  });
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -124,74 +114,6 @@ export default function Scheduling() {
     () => classes.filter((c) => c.status === "active" || c.id === selected?.class_id),
     [classes, selected]
   );
-
-  // load the roster whenever a session is opened in the drawer
-  useEffect(() => {
-    if (!drawerOpen || !selected) {
-      setAttendance([]);
-      return;
-    }
-
-    let cancelled = false;
-    setAttendanceLoading(true);
-
-    getSessionAttendance(selected.id)
-      .then((rows) => {
-        if (!cancelled) setAttendance(rows);
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (!cancelled) setAttendanceLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [drawerOpen, selected?.id]);
-
-  // Saved right away. The row updates immediately and rolls back if saving fails.
-  async function handleAttendanceChange(studentId: string, status: AttendanceStatus) {
-    if (!selected) return;
-
-    const previous = attendance.find((r) => r.student_id === studentId)?.status ?? null;
-    setAttendance((rows) =>
-      rows.map((r) => (r.student_id === studentId ? { ...r, status } : r))
-    );
-
-    try {
-      await saveAttendance({ session_id: selected.id, student_id: studentId, status });
-    } catch (e) {
-      setAttendance((rows) =>
-        rows.map((r) => (r.student_id === studentId ? { ...r, status: previous } : r))
-      );
-      setSaveError(errorMessage(e));
-    }
-  }
-
-  // Only students without attendance yet; existing marks are left alone.
-  async function handleMarkAllPresent() {
-    if (!selected) return;
-
-    const unmarkedIds = attendance.filter((r) => !r.status).map((r) => r.student_id);
-    if (unmarkedIds.length === 0) return;
-
-    const ids = new Set(unmarkedIds);
-    setAttendance((rows) =>
-      rows.map((r) => (ids.has(r.student_id) ? { ...r, status: "present" } : r))
-    );
-
-    try {
-      await saveSessionAttendance(
-        selected.id,
-        unmarkedIds.map((student_id) => ({ student_id, status: "present" as const }))
-      );
-    } catch (e) {
-      setAttendance((rows) =>
-        rows.map((r) => (ids.has(r.student_id) ? { ...r, status: null } : r))
-      );
-      setSaveError(errorMessage(e));
-    }
-  }
 
   function openDatePicker() {
     if (Platform.OS === "android") {
@@ -291,25 +213,6 @@ export default function Scheduling() {
     }
   }
 
-  async function handleStatusChange(status: SessionStatus) {
-    if (!selected) return;
-    const { id } = selected;
-    const previous = selected.status;
-
-    const apply = (s: SessionStatus) => {
-      setSelected((prev) => (prev ? { ...prev, status: s } : prev));
-      setSessions((rows) => rows.map((r) => (r.id === id ? { ...r, status: s } : r)));
-    };
-
-    apply(status);
-    try {
-      await updateClassSessionStatus(id, status);
-    } catch (e) {
-      apply(previous);
-      setSaveError(errorMessage(e));
-    }
-  }
-
   return (
     <>
       <ScrollView
@@ -368,7 +271,7 @@ export default function Scheduling() {
           onSlotPress={openAdd}
         />
 
-        
+
       </ScrollView>
 
       <SessionDrawer
