@@ -4,7 +4,9 @@ import DatetimePickerField from "@/components/ui/datetime-picker";
 import Drawer from "@/components/ui/drawer";
 import type { AttendanceStatus, SessionAttendanceRow } from "@/db/classes/attendance";
 import type { ClassSessionRow, SessionStatus } from "@/db/classes/sessions";
-import { useEffect, useMemo, useState } from "react";
+import { useFormState } from "@/hooks/use-form-state";
+import { useMarkedCount } from "@/hooks/use-marked-count";
+import { useMemo } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import AttendanceDropdown from "../attendanceDropdown";
 
@@ -23,18 +25,13 @@ type SessionDrawerProps = {
   open: boolean;
   mode: SessionDrawerMode;
   initial: SessionItem | null;
-  /** Classes a session can belong to. */
   classes: ClassItem[];
-  /** Optional prefill when adding (e.g. the grid cell the user tapped). */
   defaultStart?: Date;
   defaultClassId?: string;
-  /** Roster of the session (enrolled students + their attendance). */
   attendance?: SessionAttendanceRow[];
   attendanceLoading?: boolean;
   showActions?: boolean;
-  /** A student's attendance was changed (saved right away by the parent). */
   onAttendanceChange?: (studentId: string, status: AttendanceStatus) => void;
-  /** Mark every student that has no attendance yet as present. */
   onMarkAllPresent?: () => void;
   onClose: () => void;
   onCreate: (input: SessionFormPayload) => void;
@@ -49,9 +46,9 @@ type SessionDrawerProps = {
 type FormState = {
   classId: string;
   title: string;
-  date: Date; // only the day part is used
-  start: Date; // only the time part is used
-  end: Date; // only the time part is used
+  date: Date;
+  start: Date;
+  end: Date;
   status: SessionStatus;
   formError: string;
 };
@@ -65,12 +62,11 @@ const TITLES: Record<SessionDrawerMode, string> = {
 const STATUSES: SessionStatus[] = ["scheduled", "completed", "cancelled"];
 const HOUR_MS = 60 * 60 * 1000;
 
-// Attendance: "• Present" -> the dot carries the color
 export const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string; color: string }[] = [
-  { value: "present", label: "Present", color: "#16A34A" }, // green
-  { value: "absent", label: "Absent", color: "#DC2626" }, // red
-  { value: "late", label: "Late", color: "#F59E0B" }, // amber
-  { value: "excused", label: "Excused", color: "#3B82F6" }, // blue
+  { value: "present", label: "Present", color: "#16A34A" },
+  { value: "absent", label: "Absent", color: "#DC2626" },
+  { value: "late", label: "Late", color: "#F59E0B" },
+  { value: "excused", label: "Excused", color: "#3B82F6" },
 ];
 
 function nextFullHour() {
@@ -80,7 +76,6 @@ function nextFullHour() {
   return d;
 }
 
-// Combine the day of `day` with the clock time of `time`.
 function merge(day: Date, time: Date) {
   return new Date(
     day.getFullYear(),
@@ -146,28 +141,18 @@ export default function SessionDrawer({
 }: SessionDrawerProps) {
   const readOnly = mode === "view";
   const editable = !readOnly && !isSaving;
-  const [form, setForm] = useState<FormState>(() =>
-    buildFormState(initial, defaultStart, defaultClassId)
+  const [form, set, setForm] = useFormState(
+    () => buildFormState(initial, defaultStart, defaultClassId),
+    open,
+    `${mode}-${initial?.id ?? "new"}-${defaultStart?.getTime() ?? ""}-${defaultClassId ?? ""}`
   );
-  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
 
-  // Reset whenever the drawer opens or a different session/mode loads.
-  const key = `${mode}-${initial?.id ?? "new"}-${defaultStart?.getTime() ?? ""}-${defaultClassId ?? ""}`;
-  useEffect(() => {
-    if (open) setForm(buildFormState(initial, defaultStart, defaultClassId));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, key]);
-
-  // In view mode only the chosen class is listed; otherwise every class.
   const visibleClasses = useMemo(
     () => classes.filter((c) => !readOnly || c.id === form.classId),
     [classes, readOnly, form.classId]
   );
 
-  const markedCount = useMemo(() => attendance.filter((r) => r.status).length, [attendance]);
-  const hasUnmarked = markedCount < attendance.length;
+  const { markedCount, hasUnmarked } = useMarkedCount(attendance);
 
   function handleStartChange(next: Date) {
     setForm((prev) => {
@@ -266,10 +251,8 @@ export default function SessionDrawer({
       }
     >
       <View className="gap-[18px] pt-3">
-        {/* Class (the session color comes from this class) */}
         <View className="gap-[8px]">
           <Text className="font-inter-semibold text-[12px]">Class *</Text>
-
           <View className="rounded-[12px] border border-border">
             {visibleClasses.length === 0 ? (
               <Text className="font-inter text-[12px] text-muted text-center py-5">
@@ -359,7 +342,6 @@ export default function SessionDrawer({
           </View>
         </View>
 
-        {/* Status (only meaningful once the session exists) */}
         {mode !== "add" && (
           <View className="gap-[8px]">
             <Text className="font-inter-semibold text-[12px]">Status</Text>
@@ -372,7 +354,6 @@ export default function SessionDrawer({
                     disabled={isSaving}
                     onPress={() => {
                       set("status", status);
-                      // view mode has no Save button, so save right away
                       if (readOnly && status !== form.status) onStatusChange?.(status);
                     }}
                     className={`flex-1 items-center rounded-[12px] border py-[11px] ${isSelected ? "border-foreground bg-card" : "border-border"
@@ -391,7 +372,6 @@ export default function SessionDrawer({
           </View>
         )}
 
-        {/* Attendance (only once the session exists). Tap a student to change the status. */}
         {mode !== "add" && initial && (
           <View className="gap-[8px]">
             <View className="flex-row items-center justify-between">

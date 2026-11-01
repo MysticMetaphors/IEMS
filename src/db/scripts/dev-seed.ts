@@ -1,33 +1,20 @@
-import generateColorPair from '@/lib/utils/color-pair';
 import { resetDatabase } from '@/db/scripts/db-reset';
+import generateColorPair from '@/lib/utils/color-pair';
+import type { AttendanceStatus } from '../classes/attendance';
 import { createId } from '../ids';
 import { getDatabase } from '../index';
-import type { AttendanceStatus } from '../classes/attendance';
 
-/**
- * Development seed data: 20 students, 15 classes, every student enrolled in 5
- * classes, and class sessions for today and the following days.
- *
- * Session dates are worked out from the current date every time the seeder
- * runs, so the schedule always starts today.
- */
-
-/** How many days of sessions to create, counting today as the first. */
 export const SEED_DAYS = 7;
-
-/** How many classes each student is enrolled in. */
 export const CLASSES_PER_STUDENT = 5;
 
-// The teacher's daily timetable. A session can't overlap another one (the app
-// rejects it), so every class shares these slots: [hour, minute] in local time.
 const DAILY_SLOTS: [number, number][] = [
-  [9, 0],
-  [10, 30],
-  [13, 0],
-  [14, 30],
-  [16, 0],
+  [1, 0],
+  [4, 0],
+  [6, 0],
+  [8, 0],
+  [10, 0],
 ];
-const SESSION_MINUTES = 60;
+const SESSION_MINUTES = 120;
 
 type StudentSeed = { name: string; email: string; phone: string; notes: string };
 type ClassSeed = { name: string; subject: string; description: string };

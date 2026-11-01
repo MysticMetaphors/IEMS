@@ -10,7 +10,7 @@ const TABLES_TO_DROP = [
   'schema_migrations',
 ];
 
-export async function resetDatabase() {
+export async function resetDatabase(): Promise<void> {
   const db = await getDatabase();
   await db.withTransactionAsync(async () => {
     for (const table of TABLES_TO_DROP) {

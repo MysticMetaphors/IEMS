@@ -1,0 +1,1 @@
+export const INPUT_CLASS = "border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground";

@@ -10,70 +10,56 @@ import type { Student } from "@/components/ui/student-drawer";
 import { createClass, deleteClass, getClassById, getClassesPage, updateClass } from "@/db/classes/classes";
 import { getEnrollmentsByClass, syncClassEnrollments } from "@/db/classes/enrollment";
 import { getStudents } from "@/db/student/student";
+import { useEntityCrud } from "@/hooks/use-entity-crud";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
 
-// Delay before showing the confirm modal so the drawer has finished
-// dismissing first (iOS can't present two modals at the same time).
-const DRAWER_CLOSE_DELAY_MS = 300;
-
-type DrawerState = {
-  open: boolean;
-  mode: ClassDrawerMode;
-  classItem: ClassItem | null;
-};
-
-type DeleteState = {
-  open: boolean;
-  classItem: ClassItem | null;
-};
-
 export default function Classes() {
-  // Only the current page is loaded; search and paging happen in SQLite.
   const {
-    rows: classes,
-    total,
-    page,
-    setPage,
-    totalPages,
-    startIndex,
-    endIndex,
-    search,
-    setSearch,
+    rows: classes, total, page, setPage, totalPages,
+    startIndex, endIndex,
+    search, setSearch,
     loading,
     error: listError,
-    reload,
-    retry,
-    reset,
+    reload, retry, reset,
   } = usePagedList(getClassesPage, PAGE_SIZE);
 
-  // Students feed the enroll checklist and are loaded when a drawer opens, not up front.
   const [students, setStudents] = useState<Student[]>([]);
-
-  const [drawer, setDrawer] = useState<DrawerState>({
-    open: false,
-    mode: "add",
-    classItem: null,
-  });
-  // Student ids enrolled in the class currently shown in the drawer.
   const [drawerStudentIds, setDrawerStudentIds] = useState<string[]>([]);
-
-  const [deleteState, setDeleteState] = useState<DeleteState>({
-    open: false,
-    classItem: null,
+  const {
+    drawer, showDrawer, switchMode, closeDrawer,
+    saving, saveError, setSaveError,
+    deleteState, deleting, deleteError, requestDelete, closeDeleteModal,
+    handleCreate, handleUpdate, handleConfirmDelete,
+  } = useEntityCrud<
+    ClassItem,
+    ClassDrawerMode,
+    ClassFormPayload,
+    ClassFormPayload & { id: ClassItem["id"] }
+  >({
+    entity: "class",
+    initialMode: "add",
+    viewMode: "view",
+    list: { reload, reset, setPage },
+    create: async ({ studentIds, ...fields }) => {
+      const id = await createClass(fields);
+      await syncClassEnrollments(id, studentIds);
+    },
+    update: async ({ id, studentIds, ...fields }) => {
+      await updateClass({ id, ...fields });
+      await syncClassEnrollments(id, studentIds);
+      const updated = await getClassById(id);
+      setDrawerStudentIds(studentIds);
+      return updated;
+    },
+    remove: (classItem) => deleteClass(classItem.id),
   });
 
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const errorMessage =
-    loadError || (listError ? "Unable to load classes. Please try again." : "");
+  const errorMessage = loadError || (listError ? "Unable to load classes. Please try again." : "");
 
   // ---- Drawer controls ----
   const fetchRosterIds = async (classId: string) => {
@@ -81,20 +67,18 @@ export default function Classes() {
     return roster.filter((e) => e.status === "active").map((e) => e.student_id);
   };
 
-  // The drawer needs every student for its checklist, so they load here, when it opens.
   const openAdd = async () => {
     try {
       setSaveError(null);
       setStudents(await getStudents());
       setDrawerStudentIds([]);
-      setDrawer({ open: true, mode: "add", classItem: null });
+      showDrawer("add")
     } catch (err) {
       console.error("Failed to load students:", err);
       setLoadError("Unable to load the students. Please try again.");
     }
   };
 
-  // View / edit need the current roster so the checkboxes start in the right state.
   const openExisting = async (mode: "view" | "edit", classItem: ClassItem) => {
     try {
       setSaveError(null);
@@ -106,100 +90,10 @@ export default function Classes() {
 
       setStudents(studentOptions);
       setDrawerStudentIds(rosterIds);
-      setDrawer({ open: true, mode, classItem });
+      showDrawer(mode, classItem);
     } catch (err) {
       console.error("Failed to load class roster:", err);
       setLoadError("Unable to load the class details. Please try again.");
-    }
-  };
-
-  const closeDrawer = () => {
-    if (saving) return;
-    setDrawer((prev) => ({ ...prev, open: false }));
-  };
-
-  // ---- Delete confirmation controls ----
-  // Closes the drawer first (if it's open), then shows the confirm modal.
-  const requestDelete = (classItem: ClassItem | null) => {
-    if (!classItem) return;
-
-    setDeleteError(null);
-    setDrawer((prev) => ({ ...prev, open: false }));
-
-    setTimeout(() => {
-      setDeleteState({ open: true, classItem });
-    }, DRAWER_CLOSE_DELAY_MS);
-  };
-
-  const closeDeleteModal = () => {
-    if (deleting) return;
-    setDeleteState((prev) => ({ ...prev, open: false }));
-  };
-
-  // ---- CRUD handlers ----
-  const handleCreate = async (input: ClassFormPayload) => {
-    try {
-      setSaving(true);
-      setSaveError(null);
-
-      const { studentIds, ...fields } = input;
-      const id = await createClass(fields);
-      await syncClassEnrollments(id, studentIds);
-
-      // Show the first page with no search so the new class is visible.
-      reset();
-      setDrawer((prev) => ({ ...prev, open: false }));
-    } catch (err) {
-      console.error("Failed to create class:", err);
-      setSaveError("Unable to save the class. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleUpdate = async (input: ClassFormPayload & { id: ClassItem["id"] }) => {
-    try {
-      setSaving(true);
-      setSaveError(null);
-
-      const { id, studentIds, ...fields } = input;
-      await updateClass({ id, ...fields });
-      await syncClassEnrollments(id, studentIds);
-
-      // Reload the current page, and read the saved class directly because a rename
-      // can move it to a different page.
-      reload();
-      const updated = await getClassById(id);
-
-      // Go back to the details view showing the fresh data.
-      setDrawerStudentIds(studentIds);
-      setDrawer({ open: true, mode: "view", classItem: updated });
-    } catch (err) {
-      console.error("Failed to update class:", err);
-      setSaveError("Unable to update the class. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    const classItem = deleteState.classItem;
-    if (!classItem) return;
-
-    try {
-      setDeleting(true);
-      setDeleteError(null);
-
-      await deleteClass(classItem.id);
-
-      setPage(1);
-      reload();
-      setDeleteState((prev) => ({ ...prev, open: false }));
-    } catch (err) {
-      console.error("Failed to delete class:", err);
-      setDeleteError("Unable to delete the class. Please try again.");
-    } finally {
-      setDeleting(false);
     }
   };
 
@@ -298,7 +192,7 @@ export default function Classes() {
       <ClassDrawer
         open={drawer.open}
         mode={drawer.mode}
-        initial={drawer.classItem}
+        initial={drawer.item}
         students={students}
         initialStudentIds={drawerStudentIds}
         onClose={closeDrawer}
@@ -306,9 +200,9 @@ export default function Classes() {
         onUpdate={(input) => void handleUpdate(input)}
         onEdit={() => {
           setSaveError(null);
-          setDrawer((prev) => ({ ...prev, mode: "edit" }));
+          switchMode("edit");
         }}
-        onDelete={() => requestDelete(drawer.classItem)}
+        onDelete={() => requestDelete(drawer.item)}
         isSaving={saving}
         saveError={saveError}
       />
@@ -325,7 +219,7 @@ export default function Classes() {
           <Text className="font-inter text-[14px] text-muted">
             Are you sure you want to delete{" "}
             <Text className="font-inter-semibold text-foreground">
-              {deleteState.classItem?.name ?? "this class"}
+              {deleteState.item?.name ?? "this class"}
             </Text>
             ? Its student enrollments will be removed too. This can't be undone.
           </Text>

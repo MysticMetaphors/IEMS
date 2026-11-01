@@ -2,25 +2,21 @@ import AttendanceDropdown from "@/components/attendanceDropdown";
 import Drawer from "@/components/ui/drawer";
 import type { AttendanceStatus, SessionAttendanceRow } from "@/db/classes/attendance";
 import type { ClassSessionRow } from "@/db/classes/sessions";
-import { useMemo, type ReactNode } from "react";
+import { useMarkedCount } from "@/hooks/use-marked-count";
+import { type ReactNode } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 type AttendanceDrawerProps = {
   open: boolean;
-  /** The session being viewed (class, date and time are shown read-only). */
   session: ClassSessionRow | null;
-  /** Enrolled students + their attendance. */
   attendance: SessionAttendanceRow[];
   attendanceLoading?: boolean;
-  /** A student's attendance was changed (saved right away by the parent). */
   onAttendanceChange: (studentId: string, status: AttendanceStatus) => void;
-  /** Mark every student that has no attendance yet as present. */
   onMarkAllPresent?: () => void;
   onClose: () => void;
   error?: string | null;
 };
 
-// Wednesday, October 21, 2026
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", {
     weekday: "long",
@@ -29,14 +25,12 @@ const formatDate = (iso: string) =>
     year: "numeric",
   });
 
-// 10:00 AM – 10:30 AM
 const formatTimeRange = (startIso: string, endIso: string) => {
   const fmt = (iso: string) =>
     new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   return `${fmt(startIso)} – ${fmt(endIso)}`;
 };
 
-/** Non-editable field: same look as the other drawers, with a muted background. */
 function ReadOnlyField({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View className="gap-[8px]">
@@ -48,18 +42,9 @@ function ReadOnlyField({ label, children }: { label: string; children: ReactNode
   );
 }
 
-export default function AttendanceDrawer({
-  open,
-  session,
-  attendance,
-  attendanceLoading = false,
-  onAttendanceChange,
-  onMarkAllPresent,
-  onClose,
-  error,
-}: AttendanceDrawerProps) {
-  const markedCount = useMemo(() => attendance.filter((r) => r.status).length, [attendance]);
-  const hasUnmarked = markedCount < attendance.length;
+export default function AttendanceDrawer({ open, session, attendance, attendanceLoading = false, onAttendanceChange, onMarkAllPresent, onClose, error, }: 
+  AttendanceDrawerProps) {
+  const { markedCount, hasUnmarked } = useMarkedCount(attendance);
 
   const dot = session?.color?.split(",")[0]?.trim() || "#A9A9A9";
 
@@ -79,7 +64,6 @@ export default function AttendanceDrawer({
     >
       {session ? (
         <View className="gap-[18px] pt-3">
-          {/* Class, date and time are shown only (not editable) */}
           <ReadOnlyField label="Class">
             <View className="flex-row items-center gap-[10px]">
               <View style={{ backgroundColor: dot }} className="h-[10px] w-[10px] rounded-full" />
@@ -101,7 +85,6 @@ export default function AttendanceDrawer({
             </Text>
           </ReadOnlyField>
 
-          {/* Students + attendance (editable) */}
           <View className="gap-[8px]">
             <View className="flex-row items-center justify-between">
               <Text className="font-inter-semibold text-[12px]">

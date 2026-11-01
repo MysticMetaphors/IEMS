@@ -2,8 +2,11 @@ import Button from "@/components/button";
 import Drawer from "@/components/ui/drawer";
 import type { getClasses } from "@/db/classes/classes";
 import { getStudents } from "@/db/student/student";
-import { useEffect, useMemo, useState } from "react";
+import { useFormState } from "@/hooks/use-form-state";
+import { useMemo } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import Checkbox from "./checkbox";
+import { INPUT_CLASS } from "./form-styles";
 
 export type Student = Awaited<ReturnType<typeof getStudents>>[number];
 type ClassOption = Awaited<ReturnType<typeof getClasses>>[number];
@@ -14,16 +17,14 @@ export type StudentFormPayload = {
   email: string;
   phone: string;
   notes: string;
-  classIds: string[]; // classes to enroll the student in
+  classIds: string[];
 };
 
 type StudentDrawerProps = {
   open: boolean;
   mode: DrawerMode;
   initial: Student | null;
-  /** Every class a student can be enrolled in. */
   classes: ClassOption[];
-  /** Class ids the student is currently enrolled in (empty when adding). */
   initialClassIds: string[];
   onClose: () => void;
   onCreate: (input: StudentFormPayload) => void;
@@ -58,54 +59,16 @@ const TITLES: Record<DrawerMode, string> = {
   view: "Student Details",
 };
 
-const INPUT_CLASS =
-  "border border-border rounded-[12px] px-[14px] py-[13px] font-inter text-[12px] text-foreground";
-
-function Checkbox({ checked }: { checked: boolean }) {
-  return (
-    <View
-      className={`h-[20px] w-[20px] items-center justify-center rounded-[6px] border ${checked ? "bg-foreground border-foreground" : "bg-white border-border"
-        }`}
-    >
-      {checked ? <Text className="text-[12px] leading-[14px] text-white">✓</Text> : null}
-    </View>
-  );
-}
-
-export default function StudentDrawer({
-  open,
-  mode,
-  initial,
-  classes,
-  initialClassIds,
-  onClose,
-  onCreate,
-  onUpdate,
-  onEdit,
-  onDelete,
-  isSaving,
-  saveError,
-}: StudentDrawerProps) {
+export default function StudentDrawer({ open, mode, initial, classes, initialClassIds, onClose, onCreate, onUpdate, onEdit, onDelete, isSaving, saveError, }:
+  StudentDrawerProps) {
   const readOnly = mode === "view";
-  const [form, setForm] = useState<FormState>(() => buildFormState(initial, initialClassIds));
-
-  // Single helper for updating any one field.
-  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }
-
-  // Reset the form whenever the drawer opens or a different student/mode loads.
-  // initialClassIds is joined so a freshly loaded enrollment list also resets the checkboxes.
-  const key = `${mode}-${initial?.id ?? "new"}-${initialClassIds.join(",")}`;
-  useEffect(() => {
-    if (open) setForm(buildFormState(initial, initialClassIds));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, key]);
+  const [form, set, setForm] = useFormState(
+    () => buildFormState(initial, initialClassIds),
+    open,
+    `${mode}-${initial?.id ?? "new"}-${initialClassIds.join(",")}`
+  );
 
   const selected = useMemo(() => new Set(form.classIds), [form.classIds]);
-
-  // View mode lists only enrolled classes. Otherwise list active classes, plus any
-  // archived class the student is already in so it can still be unchecked.
   const visibleClasses = useMemo(() => {
     const query = form.classSearch.trim().toLowerCase();
     return classes.filter((c) => {
