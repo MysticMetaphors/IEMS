@@ -114,7 +114,7 @@ On Android 13+, the app requests the notification permission (`POST_NOTIFICATION
 | Command | Description |
 | --- | --- |
 | `npm start` | Start the Expo dev server |
-| `npm run android` | Build and run the app on Android (`expo run:android`) |
+| `npx expo start --android` | Build and run the app on Android (`expo run:android`) |
 | `npm run ios` | Build and run the app on iOS (`expo run:ios`) |
 | `npm run web` | Start the app in a web browser |
 | `npm run lint` | Lint the project with Expo's ESLint setup |
