@@ -18,8 +18,9 @@ type Config<TItem, TMode extends string, TCreate, TUpdate> = {
   entity: string;
   initialMode: TMode;
   viewMode: TMode;
+  // The list refreshes itself when `create`, `update` and `remove` invalidate
+  // the cache, so only the search/page state needs resetting here.
   list: {
-    reload: () => unknown;
     reset: () => unknown;
     setPage: (page: number) => void;
   };
@@ -98,7 +99,6 @@ export function useEntityCrud<TItem, TMode extends string, TCreate, TUpdate>({ e
       setSaveError(null);
 
       const updated = await update(input);
-      list.reload();
 
       setDrawer({ open: true, mode: viewMode, item: updated });
     } catch (err) {
@@ -120,7 +120,6 @@ export function useEntityCrud<TItem, TMode extends string, TCreate, TUpdate>({ e
       await remove(item);
 
       list.setPage(1);
-      list.reload();
       setDeleteState((prev) => ({ ...prev, open: false }));
     } catch (err) {
       console.error(`Failed to delete ${entity}:`, err);

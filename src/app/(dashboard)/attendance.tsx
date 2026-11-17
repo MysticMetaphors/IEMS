@@ -11,9 +11,10 @@ import { ListSkeleton } from "@/components/ui/skeleton";
 import { getClassSessionsPage } from "@/db/classes/sessions";
 import { usePagedList } from "@/hooks/use-paged-list";
 import { useSessionAttendance } from "@/hooks/use-session-attendance";
+import { queryKeys } from "@/lib/query/keys";
 import { getDisplayStatus, type DisplaySessionStatus } from "@/lib/utils/session-status";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
@@ -51,8 +52,12 @@ const formatTimeRange = (startIso: string, endIso: string) => {
 };
 
 export default function Attendance() {
-  const { rows: sessions, total, page, setPage, totalPages, startIndex, endIndex, search, setSearch, loading, reload,
-  } = usePagedList(getClassSessionsPage, PAGE_SIZE);
+  const { rows: sessions, total, page, setPage, totalPages, startIndex, endIndex, search, setSearch, loading,
+  } = usePagedList({
+    queryKey: queryKeys.sessions.pages(),
+    fetchPage: getClassSessionsPage,
+    pageSize: PAGE_SIZE,
+  });
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 60_000);
@@ -65,17 +70,12 @@ export default function Attendance() {
     openSession, handleAttendanceChange, handleMarkAllPresent,
   } = useSessionAttendance({ setError: setDrawerError });
 
-  const hasBeenFocused = useRef(false);
+  // Sessions refresh themselves when they change (see lib/query/invalidate.ts);
+  // coming back to the screen only needs the clock moved forward.
   useFocusEffect(
     useCallback(() => {
       setNow(Date.now());
-
-      if (hasBeenFocused.current) {
-        reload();
-      } else {
-        hasBeenFocused.current = true;
-      }
-    }, [reload])
+    }, [])
   );
 
   return (

@@ -1,5 +1,10 @@
 import type { Page } from '@/db/pagination';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  keepPreviousData,
+  useQuery,
+  type QueryKey,
+} from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 
 type FetchPage<T> = (request: {
   search: string;
@@ -7,95 +12,83 @@ type FetchPage<T> = (request: {
   offset: number;
 }) => Promise<Page<T>>;
 
+// One shared empty array, so `rows` keeps the same reference until data arrives.
+const EMPTY: never[] = [];
+
+type Options<T> = {
+  /**
+   * Prefix shared by every page of this list, e.g. `queryKeys.classes.pages()`.
+   * The search text, page number and page size are added to it, so each page
+   * of each search is cached on its own. Invalidating the prefix (or anything
+   * above it) refreshes the list.
+   */
+  queryKey: QueryKey;
+  fetchPage: FetchPage<T>;
+  pageSize: number;
+};
+
 /**
  * Loads a list one page at a time from the database, so screens never hold
  * (or fetch) more rows than they show.
  *
- * `fetchPage` must be a stable reference, such as an imported function. An
- * inline arrow would change on every render and reload the list each time.
+ * Pages are cached by TanStack Query: going back to a page or a search you
+ * already visited shows its rows immediately, and they are refreshed in the
+ * background when a write invalidates them.
  *
  * - Changing the search goes back to page 1.
  * - A slow response for an old page or search is ignored if a newer one was
  *   requested, so quick typing or tapping never shows stale rows.
  * - If the current page no longer exists (for example its last row was
  *   deleted), it steps back to the last page that does.
- * - Rows from the previous load stay on screen while the next page loads.
+ * - Rows from the previous page stay on screen while the next page loads.
  */
-export function usePagedList<T>(fetchPage: FetchPage<T>, pageSize: number) {
+export function usePagedList<T>({ queryKey, fetchPage, pageSize }: Options<T>) {
   const [search, setSearchState] = useState('');
   const [page, setPage] = useState(1);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [data, setData] = useState<{ rows: T[]; total: number }>({
-    rows: [],
-    total: 0,
+
+  const term = search.trim();
+
+  const query = useQuery({
+    queryKey: [...queryKey, { search: term, page, pageSize }],
+    queryFn: () =>
+      fetchPage({ search: term, limit: pageSize, offset: (page - 1) * pageSize }),
+    placeholderData: keepPreviousData,
   });
-  // True until the first load finishes (or again after retry()).
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
 
-  const query = search.trim();
+  const rows = query.data?.rows ?? EMPTY;
+  const total = query.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchPage({ search: query, limit: pageSize, offset: (page - 1) * pageSize })
-      .then(({ rows, total }) => {
-        if (cancelled) return;
-
-        const lastPage = Math.max(1, Math.ceil(total / pageSize));
-        if (page > lastPage) {
-          // This page is gone; the page change triggers a fresh load.
-          setPage(lastPage);
-          return;
-        }
-
-        setData({ rows, total });
-        setError(false);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-
-        console.error('Failed to load page:', err);
-        setError(true);
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchPage, pageSize, page, query, reloadKey]);
+  // This page is gone (e.g. its last row was deleted): step back to the last
+  // page that exists. Only trust real data, not the previous page's placeholder.
+  // (Adjusting state while rendering lets React redo the render right away,
+  // without a frame showing the empty page.)
+  if (query.data && !query.isPlaceholderData && page > totalPages) {
+    setPage(totalPages);
+  }
 
   const setSearch = useCallback((value: string) => {
     setSearchState(value);
     setPage(1);
   }, []);
 
-  /** Loads the current page again (after a save or delete). */
-  const reload = useCallback(() => {
-    setReloadKey((key) => key + 1);
-  }, []);
-
-  /** Like reload, but shows the loading state again (for a "Try again" button). */
+  /** Shows the loading state again and loads the current page (for a "Try again" button). */
+  const { refetch } = query;
   const retry = useCallback(() => {
-    setLoading(true);
-    setError(false);
-    setReloadKey((key) => key + 1);
-  }, []);
+    void refetch();
+  }, [refetch]);
 
-  /** Clears the search, goes to page 1 and reloads (so a new record is visible). */
+  /** Clears the search and goes to page 1 (so a new record is visible). */
   const reset = useCallback(() => {
     setSearchState('');
     setPage(1);
-    setReloadKey((key) => key + 1);
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(data.total / pageSize));
   const startIndex = (page - 1) * pageSize;
 
   return {
-    rows: data.rows,
-    total: data.total,
+    rows,
+    total,
     page,
     setPage,
     totalPages,
@@ -103,9 +96,9 @@ export function usePagedList<T>(fetchPage: FetchPage<T>, pageSize: number) {
     endIndex: startIndex + pageSize,
     search,
     setSearch,
-    loading,
-    error,
-    reload,
+    // True only until the first rows arrive (and again while retrying after an error).
+    loading: query.isPending,
+    error: query.isError,
     retry,
     reset,
   };

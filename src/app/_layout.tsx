@@ -2,6 +2,8 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } f
 import { OleoScriptSwashCaps_400Regular } from "@expo-google-fonts/oleo-script-swash-caps";
 import { useFonts } from "expo-font";
 import * as Notifications from "expo-notifications";
+import { queryClient } from "@/lib/query/client";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "../global.css";
@@ -30,8 +32,10 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false, animation: "none", }} />
-    </SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false, animation: "none", }} />
+      </SafeAreaProvider>
+    </QueryClientProvider>
   )
 }

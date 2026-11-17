@@ -8,24 +8,32 @@ import Pagination from "@/components/ui/pagination";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import type { Student } from "@/components/ui/student-drawer";
 import { createClass, deleteClass, getClassById, getClassesPage, updateClass } from "@/db/classes/classes";
-import { getEnrollmentsByClass, syncClassEnrollments } from "@/db/classes/enrollment";
-import { getStudents } from "@/db/student/student";
+import { syncClassEnrollments } from "@/db/classes/enrollment";
 import { useEntityCrud } from "@/hooks/use-entity-crud";
 import { usePagedList } from "@/hooks/use-paged-list";
+import { invalidateAfterClassChange } from "@/lib/query/invalidate";
+import { queryKeys } from "@/lib/query/keys";
+import { classEnrollmentsQuery, studentsQuery } from "@/lib/query/queries";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
 
 export default function Classes() {
+  const queryClient = useQueryClient();
   const {
     rows: classes, total, page, setPage, totalPages,
     startIndex, endIndex,
     search, setSearch,
     loading,
     error: listError,
-    reload, retry, reset,
-  } = usePagedList(getClassesPage, PAGE_SIZE);
+    retry, reset,
+  } = usePagedList({
+    queryKey: queryKeys.classes.pages(),
+    fetchPage: getClassesPage,
+    pageSize: PAGE_SIZE,
+  });
 
   const [students, setStudents] = useState<Student[]>([]);
   const [drawerStudentIds, setDrawerStudentIds] = useState<string[]>([]);
@@ -43,34 +51,40 @@ export default function Classes() {
     entity: "class",
     initialMode: "add",
     viewMode: "view",
-    list: { reload, reset, setPage },
+    list: { reset, setPage },
     create: async ({ studentIds, ...fields }) => {
       const id = await createClass(fields);
       await syncClassEnrollments(id, studentIds);
+      await invalidateAfterClassChange(queryClient);
     },
     update: async ({ id, studentIds, ...fields }) => {
       await updateClass({ id, ...fields });
       await syncClassEnrollments(id, studentIds);
       const updated = await getClassById(id);
+      await invalidateAfterClassChange(queryClient);
       setDrawerStudentIds(studentIds);
       return updated;
     },
-    remove: (classItem) => deleteClass(classItem.id),
+    remove: async (classItem) => {
+      await deleteClass(classItem.id);
+      await invalidateAfterClassChange(queryClient);
+    },
   });
 
   const [loadError, setLoadError] = useState("");
   const errorMessage = loadError || (listError ? "Unable to load classes. Please try again." : "");
 
   // ---- Drawer controls ----
+  // Roster and student options come from the cache when they are still current.
   const fetchRosterIds = async (classId: string) => {
-    const roster = await getEnrollmentsByClass(classId);
+    const roster = await queryClient.fetchQuery(classEnrollmentsQuery(classId));
     return roster.filter((e) => e.status === "active").map((e) => e.student_id);
   };
 
   const openAdd = async () => {
     try {
       setSaveError(null);
-      setStudents(await getStudents());
+      setStudents(await queryClient.fetchQuery(studentsQuery()));
       setDrawerStudentIds([]);
       showDrawer("add")
     } catch (err) {
@@ -85,7 +99,7 @@ export default function Classes() {
 
       const [rosterIds, studentOptions] = await Promise.all([
         fetchRosterIds(classItem.id),
-        getStudents(),
+        queryClient.fetchQuery(studentsQuery()),
       ]);
 
       setStudents(studentOptions);

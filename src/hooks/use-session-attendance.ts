@@ -1,5 +1,4 @@
 import {
-  getSessionAttendance,
   saveAttendance,
   saveSessionAttendance,
   type AttendanceStatus,
@@ -10,43 +9,51 @@ import {
   type ClassSessionRow,
   type SessionStatus,
 } from "@/db/classes/sessions";
+import type { Page } from "@/db/pagination";
 import { errorMessage } from "@/lib/utils/error-message";
-import { useEffect, useState } from "react";
+import {
+  invalidateAfterAttendanceChange,
+  invalidateAfterSessionStatusChange,
+} from "@/lib/query/invalidate";
+import { queryKeys } from "@/lib/query/keys";
+import { sessionAttendanceQuery } from "@/lib/query/queries";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 type Options = {
   setError: (message: string | null) => void;
-  onSaved?: () => void;
-  onStatusApplied?: (id: string, status: SessionStatus) => void;
 };
 
-export function useSessionAttendance({ setError, onSaved, onStatusApplied }: Options) {
+const NO_ATTENDANCE: SessionAttendanceRow[] = [];
+
+// Session queries hold either a plain list (a day / week) or a page of rows.
+type SessionsCache = ClassSessionRow[] | Page<ClassSessionRow>;
+
+/** Shows a new status in every cached session list right away. */
+function patchSessionStatus(client: QueryClient, id: string, status: SessionStatus) {
+  const patch = (rows: ClassSessionRow[]) =>
+    rows.map((row) => (row.id === id ? { ...row, status } : row));
+
+  client.setQueriesData<SessionsCache>({ queryKey: queryKeys.sessions.all }, (cached) => {
+    if (!cached) return cached;
+    return Array.isArray(cached) ? patch(cached) : { ...cached, rows: patch(cached.rows) };
+  });
+}
+
+export function useSessionAttendance({ setError }: Options) {
+  const queryClient = useQueryClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selected, setSelected] = useState<ClassSessionRow | null>(null);
-  const [attendance, setAttendance] = useState<SessionAttendanceRow[]>([]);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
 
-  useEffect(() => {
-    if (!drawerOpen || !selected) {
-      setAttendance([]);
-      return;
-    }
+  const enabled = drawerOpen && selected !== null;
+  const attendanceQuery = useQuery({
+    ...sessionAttendanceQuery(selected?.id ?? ""),
+    enabled,
+  });
 
-    let cancelled = false;
-    setAttendanceLoading(true);
-
-    getSessionAttendance(selected.id)
-      .then((rows) => {
-        if (!cancelled) setAttendance(rows);
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (!cancelled) setAttendanceLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [drawerOpen, selected?.id]);
+  // Rows are cached per session, so reopening a session shows them instantly.
+  const attendance = enabled ? (attendanceQuery.data ?? NO_ATTENDANCE) : NO_ATTENDANCE;
+  const attendanceLoading = enabled && attendanceQuery.isPending;
 
   function openSession(session: ClassSessionRow) {
     setSelected(session);
@@ -54,23 +61,42 @@ export function useSessionAttendance({ setError, onSaved, onStatusApplied }: Opt
     setDrawerOpen(true);
   }
 
+  /** Changes the status of some students in the cached attendance list. */
+  function patchAttendance(
+    sessionId: string,
+    studentIds: Set<string>,
+    status: AttendanceStatus | null
+  ) {
+    queryClient.setQueryData<SessionAttendanceRow[]>(
+      queryKeys.attendance.bySession(sessionId),
+      (rows) =>
+        rows?.map((row) => (studentIds.has(row.student_id) ? { ...row, status } : row))
+    );
+  }
+
   async function handleAttendanceChange(studentId: string, status: AttendanceStatus) {
     if (!selected) return;
 
-    const previous = attendance.find((r) => r.student_id === studentId)?.status ?? null;
-    const setStatus = (s: AttendanceStatus | null) =>
-      setAttendance((rows) =>
-        rows.map((r) => (r.student_id === studentId ? { ...r, status: s } : r))
-      );
+    const sessionId = selected.id;
+    const key = queryKeys.attendance.bySession(sessionId);
+
+    // A refetch finishing after the change below would overwrite it.
+    await queryClient.cancelQueries({ queryKey: key });
+
+    const previous =
+      queryClient
+        .getQueryData<SessionAttendanceRow[]>(key)
+        ?.find((r) => r.student_id === studentId)?.status ?? null;
+    const ids = new Set([studentId]);
 
     setError(null);
-    setStatus(status);
+    patchAttendance(sessionId, ids, status);
 
     try {
-      await saveAttendance({ session_id: selected.id, student_id: studentId, status });
-      onSaved?.();
+      await saveAttendance({ session_id: sessionId, student_id: studentId, status });
+      void invalidateAfterAttendanceChange(queryClient);
     } catch (e) {
-      setStatus(previous);
+      patchAttendance(sessionId, ids, previous);
       setError(errorMessage(e));
     }
   }
@@ -78,26 +104,25 @@ export function useSessionAttendance({ setError, onSaved, onStatusApplied }: Opt
   async function handleMarkAllPresent() {
     if (!selected) return;
 
+    const sessionId = selected.id;
     const unmarkedIds = attendance.filter((r) => !r.status).map((r) => r.student_id);
     if (unmarkedIds.length === 0) return;
 
     const ids = new Set(unmarkedIds);
-    const setStatus = (s: AttendanceStatus | null) =>
-      setAttendance((rows) =>
-        rows.map((r) => (ids.has(r.student_id) ? { ...r, status: s } : r))
-      );
+
+    await queryClient.cancelQueries({ queryKey: queryKeys.attendance.bySession(sessionId) });
 
     setError(null);
-    setStatus("present");
+    patchAttendance(sessionId, ids, "present");
 
     try {
       await saveSessionAttendance(
-        selected.id,
+        sessionId,
         unmarkedIds.map((student_id) => ({ student_id, status: "present" as const }))
       );
-      onSaved?.();
+      void invalidateAfterAttendanceChange(queryClient);
     } catch (e) {
-      setStatus(null);
+      patchAttendance(sessionId, ids, null);
       setError(errorMessage(e));
     }
   }
@@ -109,15 +134,18 @@ export function useSessionAttendance({ setError, onSaved, onStatusApplied }: Opt
 
     const apply = (s: SessionStatus) => {
       setSelected((prev) => (prev ? { ...prev, status: s } : prev));
-      onStatusApplied?.(id, s);
+      patchSessionStatus(queryClient, id, s);
     };
+
+    // A refetch finishing after the change below would overwrite it.
+    await queryClient.cancelQueries({ queryKey: queryKeys.sessions.all });
 
     setError(null);
     apply(status);
 
     try {
       await updateClassSessionStatus(id, status);
-      onSaved?.();
+      void invalidateAfterSessionStatusChange(queryClient);
     } catch (e) {
       apply(previous);
       setError(errorMessage(e));

@@ -6,25 +6,34 @@ import Menu from "@/components/ui/menu";
 import Modal from "@/components/ui/modal";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import StudentDrawer, { DrawerMode, Student, StudentFormPayload } from "@/components/ui/student-drawer";
-import { getClasses } from "@/db/classes/classes";
-import { getEnrollmentsByStudent, syncStudentEnrollments } from "@/db/classes/enrollment";
+import type { getClasses } from "@/db/classes/classes";
+import { syncStudentEnrollments } from "@/db/classes/enrollment";
 import { createStudent, deleteStudent, getStudentById, getStudentsPage, updateStudent } from "@/db/student/student";
 import { useEntityCrud } from "@/hooks/use-entity-crud";
 import { usePagedList } from "@/hooks/use-paged-list";
+import { invalidateAfterStudentChange } from "@/lib/query/invalidate";
+import { queryKeys } from "@/lib/query/keys";
+import { classesQuery, studentEnrollmentsQuery } from "@/lib/query/queries";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
 const PAGE_SIZE = 10;
 
 export default function Students() {
+  const queryClient = useQueryClient();
   const {
     rows: students, total, page, setPage, totalPages,
     startIndex, endIndex,
     search, setSearch,
     loading,
     error: listError,
-    reload, retry, reset,
-  } = usePagedList(getStudentsPage, PAGE_SIZE);
+    retry, reset,
+  } = usePagedList({
+    queryKey: queryKeys.students.pages(),
+    fetchPage: getStudentsPage,
+    pageSize: PAGE_SIZE,
+  });
 
   const [classes, setClasses] = useState<Awaited<ReturnType<typeof getClasses>>>([]);
   const [drawerClassIds, setDrawerClassIds] = useState<string[]>([]);
@@ -42,19 +51,24 @@ export default function Students() {
     entity: "student",
     initialMode: "add",
     viewMode: "view",
-    list: { reload, reset, setPage },
+    list: { reset, setPage },
     create: async ({ classIds, ...fields }) => {
       const id = await createStudent(fields);
       await syncStudentEnrollments(id, classIds);
+      await invalidateAfterStudentChange(queryClient);
     },
     update: async ({ id, classIds, ...fields }) => {
       await updateStudent({ id, ...fields });
       await syncStudentEnrollments(id, classIds);
       const updated = await getStudentById(id);
+      await invalidateAfterStudentChange(queryClient);
       setDrawerClassIds(classIds);
       return updated;
     },
-    remove: (student) => deleteStudent(student.id),
+    remove: async (student) => {
+      await deleteStudent(student.id);
+      await invalidateAfterStudentChange(queryClient);
+    },
   });
 
   const [loadError, setLoadError] = useState("");
@@ -64,9 +78,10 @@ export default function Students() {
     setSaveError(null);
 
     try {
+      // Class options and enrollments come from the cache when they are still current.
       const [classOptions, enrollments] = await Promise.all([
-        getClasses(),
-        student ? getEnrollmentsByStudent(student.id) : Promise.resolve(null),
+        queryClient.fetchQuery(classesQuery()),
+        student ? queryClient.fetchQuery(studentEnrollmentsQuery(student.id)) : Promise.resolve(null),
       ]);
 
       setClasses(classOptions);
