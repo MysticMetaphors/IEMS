@@ -10,21 +10,25 @@ import WeeklySchedule, {
   type ScheduleView,
 } from "@/components/ui/schedule-view/weekly-schedule";
 import SegmentedTabs from "@/components/ui/segmented-tabs";
-import { getClasses } from "@/db/classes/classes";
 import {
   createClassSession,
   deleteClassSession,
-  getClassSessions,
   updateClassSession,
   type ClassSessionRow
 } from "@/db/classes/sessions";
 import { useSessionAttendance } from "@/hooks/use-session-attendance";
+import { invalidateAfterSessionChange } from "@/lib/query/invalidate";
+import { classesQuery, sessionsRangeQuery } from "@/lib/query/queries";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Platform, Pressable, ScrollView, Text, View } from "react-native";
 
 const TABS = [{ label: "Day" }, { label: "Week" }];
+
+// Shared fallbacks so the arrays keep the same reference until data arrives.
+const NO_SESSIONS: ClassSessionRow[] = [];
+const NO_CLASSES: ClassItem[] = [];
 
 const startOfDay = (date: Date) => {
   const d = new Date(date);
@@ -49,14 +53,11 @@ const errorMessage = (e: unknown) =>
   e instanceof Error ? e.message : "Something went wrong. Please try again.";
 
 export default function Scheduling() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("Day");
   const [filterDate, setFilterDate] = useState<Date>(() => startOfDay(new Date()));
   const [showIosPicker, setShowIosPicker] = useState(false);
   const view: ScheduleView = activeTab === "Day" ? "day" : "week";
-
-  const [sessions, setSessions] = useState<ClassSessionRow[]>([]);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const [drawerMode, setDrawerMode] = useState<SessionDrawerMode>("add");
   const [defaultStart, setDefaultStart] = useState<Date | undefined>(undefined);
@@ -65,11 +66,7 @@ export default function Scheduling() {
   const {
     drawerOpen, setDrawerOpen, selected, setSelected, attendance, attendanceLoading,
     handleAttendanceChange, handleMarkAllPresent, handleStatusChange,
-  } = useSessionAttendance({
-    setError: setSaveError,
-    onStatusApplied: (id, status) =>
-      setSessions((rows) => rows.map((r) => (r.id === id ? { ...r, status } : r))),
-  });
+  } = useSessionAttendance({ setError: setSaveError });
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -89,24 +86,18 @@ export default function Scheduling() {
       ? formatDate(range.from)
       : `${formatShort(range.from)} - ${formatDate(range.lastDay)}`;
 
-  const load = useCallback(async () => {
-    const [sessionRows, classRows] = await Promise.all([
-      getClassSessions({ from: range.from, to: range.to }),
-      getClasses(),
-    ]);
-    setSessions(sessionRows);
-    setClasses(classRows);
-  }, [range]);
+  // Each day / week is cached on its own, so going back to one you already
+  // viewed is instant. The previous range stays on screen while a new one loads.
+  const sessionsQuery = useQuery({
+    ...sessionsRangeQuery(range),
+    placeholderData: keepPreviousData,
+  });
+  const classesResult = useQuery(classesQuery());
 
-  // refresh when the screen is shown or the view / date changes
-  useFocusEffect(
-    useCallback(() => {
-      // Also ends the placeholders if the first load fails, so they never stay forever.
-      load()
-        .catch(console.error)
-        .finally(() => setLoading(false));
-    }, [load])
-  );
+  const sessions = sessionsQuery.data ?? NO_SESSIONS;
+  const classes = classesResult.data ?? NO_CLASSES;
+  // Placeholders only on the very first load; a failed load ends them too.
+  const loading = sessionsQuery.isPending;
 
   // Only active classes can get new sessions, but keep the class of the
   // session being viewed/edited even if it was archived since.
@@ -156,7 +147,7 @@ export default function Scheduling() {
     setSaveError(null);
     try {
       await createClassSession(input);
-      await load();
+      await invalidateAfterSessionChange(queryClient);
       setDrawerOpen(false);
     } catch (e) {
       setSaveError(errorMessage(e));
@@ -170,7 +161,7 @@ export default function Scheduling() {
     setSaveError(null);
     try {
       await updateClassSession(input);
-      await load();
+      await invalidateAfterSessionChange(queryClient);
       setDrawerOpen(false);
     } catch (e) {
       setSaveError(errorMessage(e));
@@ -202,7 +193,7 @@ export default function Scheduling() {
 
     try {
       await deleteClassSession(selected.id);
-      await load();
+      await invalidateAfterSessionChange(queryClient);
 
       setDeleteModalOpen(false);
       setSelected(null);

@@ -7,18 +7,19 @@ import KPI from "@/components/dashboard/KPI";
 import type { ClassItem } from "@/components/ui/class-drawer";
 import SessionDrawer from "@/components/ui/class-session-drawer";
 import { ListSkeleton } from "@/components/ui/skeleton";
-import { getClasses } from "@/db/classes/classes";
-import {
-  getCompletedClassSummary,
-  getSessionIssues,
-  type SessionIssueRow,
-} from "@/db/classes/dashboard";
-import {
-  getClassSessions,
-  type ClassSessionRow
-} from "@/db/classes/sessions";
+import type { SessionIssueRow } from "@/db/classes/dashboard";
+import type { ClassSessionRow } from "@/db/classes/sessions";
+import { useRefreshOnFocus } from "@/hooks/use-refresh-on-focus";
 import { useSessionAttendance } from "@/hooks/use-session-attendance";
-import { Link, useFocusEffect } from "expo-router";
+import { queryKeys } from "@/lib/query/keys";
+import {
+  classesQuery,
+  completedSummaryQuery,
+  sessionIssuesQuery,
+  sessionsRangeQuery,
+} from "@/lib/query/queries";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
@@ -53,8 +54,11 @@ const startOfDay = (date: Date) => {
   return d;
 };
 
-const errorMessage = (e: unknown) =>
-  e instanceof Error ? e.message : "Something went wrong. Please try again.";
+// Shared fallbacks so the arrays keep the same reference until data arrives.
+const NO_SUMMARY = { thisMonth: 0, lastMonth: 0 };
+const NO_SESSIONS: ClassSessionRow[] = [];
+const NO_ISSUES: SessionIssueRow[] = [];
+const NO_CLASSES: ClassItem[] = [];
 
 const noop = () => { };
 
@@ -148,49 +152,46 @@ function IssueRow({
 }
 
 export default function Overview() {
-  const [summary, setSummary] = useState({ thisMonth: 0, lastMonth: 0 });
-  const [todaySessions, setTodaySessions] = useState<ClassSessionRow[]>([]);
-  const [issues, setIssues] = useState<SessionIssueRow[]>([]);
-  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const queryClient = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const {
     drawerOpen, setDrawerOpen, selected, attendance, attendanceLoading,
     openSession, handleAttendanceChange, handleMarkAllPresent, handleStatusChange,
-  } = useSessionAttendance({
-    setError: setDrawerError,
-    onSaved: () => load().catch(console.error),
-    onStatusApplied: (id, status) =>
-      setTodaySessions((rows) => rows.map((r) => (r.id === id ? { ...r, status } : r))),
-  });
+  } = useSessionAttendance({ setError: setDrawerError });
 
-  const [loading, setLoading] = useState(true);
-  const load = useCallback(async () => {
-    const now = new Date();
-    const dayStart = startOfDay(now);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
+  // "Today" is re-checked whenever the screen is shown, so it rolls over at midnight.
+  const [dayStart, setDayStart] = useState(() => startOfDay(new Date()));
+  const today = useMemo(() => {
+    const to = new Date(dayStart);
+    to.setDate(to.getDate() + 1);
+    return { from: dayStart, to };
+  }, [dayStart]);
 
-    const [completed, today, issueRows, classRows] = await Promise.all([
-      getCompletedClassSummary(now),
-      getClassSessions({ from: dayStart, to: dayEnd }),
-      getSessionIssues({ now }),
-      getClasses(),
-    ]);
+  const summaryQuery = useQuery(completedSummaryQuery());
+  const todayQuery = useQuery(sessionsRangeQuery(today));
+  const issuesQuery = useQuery(sessionIssuesQuery());
+  const classesResult = useQuery(classesQuery());
 
-    setSummary(completed);
-    setTodaySessions(today);
-    setIssues(issueRows);
-    setClasses(classRows);
-  }, []);
+  const summary = summaryQuery.data ?? NO_SUMMARY;
+  const todaySessions = todayQuery.data ?? NO_SESSIONS;
+  const issues = issuesQuery.data ?? NO_ISSUES;
+  const classes = classesResult.data ?? NO_CLASSES;
 
-  useFocusEffect(
+  // Placeholders only on the very first load; coming back shows the cached rows.
+  const loading = summaryQuery.isPending || todayQuery.isPending || issuesQuery.isPending;
+
+  const { refetch: refetchToday } = todayQuery;
+  useRefreshOnFocus(
     useCallback(() => {
-      load()
-        .catch(console.error)
-        .finally(() => setLoading(false));
-    }, [load])
+      const now = startOfDay(new Date());
+      setDayStart((prev) => (prev.getTime() === now.getTime() ? prev : now));
+
+      // What the dashboard shows depends on the current time, so re-read it.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
+      void refetchToday();
+    }, [queryClient, refetchToday])
   );
 
   const issueBySession = useMemo(() => new Map(issues.map((i) => [i.id, i])), [issues]);

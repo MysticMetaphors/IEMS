@@ -1,4 +1,5 @@
 import { resetDatabase } from "@/db/scripts/db-reset";
+import { queryClient } from "@/lib/query/client";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
@@ -23,7 +24,9 @@ export default function ResetDatabaseRoute() {
     started.current = true;
 
     resetDatabase()
-      .then(() => {
+      .then(async () => {
+        // The database changed outside the app's normal writes: drop all cached rows.
+        await queryClient.resetQueries();
         setMessage("Database reset completed successfully.")
         router.replace('/')
       })
