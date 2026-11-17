@@ -7,11 +7,6 @@ type ComingSoonProps = {
   description: string;
 };
 
-/**
- * Full-height placeholder for features that are not built yet.
- * Sits inside the dashboard layout, so it leaves room at the bottom
- * for the floating navigation bar.
- */
 export default function ComingSoon({ title, description }: ComingSoonProps) {
   return (
     <View className="mb-[135px] flex-1 items-center justify-center overflow-hidden rounded-[12px] border border-border bg-card px-[28px]">
