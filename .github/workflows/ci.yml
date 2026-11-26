@@ -24,3 +24,24 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test -- --ci
+
+  website:
+    name: Build website
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Skips the build until website/package.json exists.
+      - id: site
+        run: echo "exists=${{ hashFiles('website/package.json') != '' }}" >> "$GITHUB_OUTPUT"
+      - if: steps.site.outputs.exists == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - if: steps.site.outputs.exists == 'true'
+        run: npm ci
+        working-directory: website
+      - if: steps.site.outputs.exists == 'true'
+        run: npm run build
+        working-directory: website
