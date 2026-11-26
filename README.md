@@ -67,6 +67,10 @@ The terminal will show a QR code and shortcuts for opening the app on Android, i
 
 > IEMS stores its data locally on the device with SQLite, so there is no backend or database server to set up.
 
+### Accounts
+
+The first launch asks you to create an account (name, email and password). It is stored only on the device, one account per device, with the password saved as a salted hash. You stay signed in until you log out. There is no password reset: to start over you have to clear the app's data, which also deletes your students and classes. The login protects the app's screens; it does not encrypt the database.
+
 ---
 
 ## Running on a Device or Emulator
@@ -120,8 +124,8 @@ On Android 13+, the app requests the notification permission (`POST_NOTIFICATION
 | `npm run lint` | Lint the project with Expo's ESLint setup |
 | `npm test` | Run the unit tests (in `__tests__/`) |
 | `npm run typecheck` | Type-check the project |
-| `npm run db:reset` | Development only: delete all local data on a connected Android device or emulator running a development build |
-| `npm run db:seed` | Development only: delete all local data, then fill the database with sample students, classes, enrollments and sessions starting today (same device requirements) |
+| `npm run db:reset` | Development only: delete all local data, including the account, on a connected Android device or emulator running a development build |
+| `npm run db:seed` | Development only: replace all students, classes and attendance (the account is kept) with sample students, classes, enrollments and sessions starting today (same device requirements) |
 | `npx expo-doctor` | Diagnose dependency and config issues |
 | `npx expo install --fix` | Fix packages that don't match the installed SDK |
 

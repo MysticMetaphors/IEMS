@@ -84,6 +84,31 @@ export const MIGRATIONS: Migration[] = [
       await addColumnIfMissing(db, 'class_sessions', 'color', 'TEXT');
     },
   },
+  {
+    version: 3,
+    name: 'local accounts',
+    up: async (db) => {
+      await db.execAsync(`
+        CREATE TABLE users (
+          id TEXT PRIMARY KEY NOT NULL,
+          name TEXT NOT NULL,
+          email TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          password_salt TEXT NOT NULL,
+          password_cost INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        -- At most one row: who is signed in on this device.
+        CREATE TABLE auth_session (
+          id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at TEXT NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;

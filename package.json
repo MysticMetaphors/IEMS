@@ -17,6 +17,7 @@
     "@expo-google-fonts/instrument-serif": "^0.4.1",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/oleo-script-swash-caps": "^0.4.1",
+    "@noble/hashes": "~1.8.0",
     "@react-native-community/datetimepicker": "8.6.0",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/elements": "^2.9.10",

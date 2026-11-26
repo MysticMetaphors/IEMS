@@ -1,4 +1,5 @@
 import { resetDatabase } from "@/db/scripts/db-reset";
+import { useAuth } from "@/lib/auth/auth-context";
 import { queryClient } from "@/lib/query/client";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -7,6 +8,7 @@ import { Text, View } from "react-native";
 export default function ResetDatabaseRoute() {
   const router = useRouter()
   const { confirm } = useLocalSearchParams<{ confirm?: string }>();
+  const { refresh } = useAuth();
   const started = useRef(false);
   const [message, setMessage] = useState("Preparing database reset...");
 
@@ -27,6 +29,8 @@ export default function ResetDatabaseRoute() {
       .then(async () => {
         // The database changed outside the app's normal writes: drop all cached rows.
         await queryClient.resetQueries();
+        // The account may be gone: read the sign-in state again.
+        await refresh();
         setMessage("Database reset completed successfully.")
         router.replace('/')
       })
@@ -37,7 +41,7 @@ export default function ResetDatabaseRoute() {
           }`
         );
       });
-  }, [confirm]);
+  }, [confirm, refresh]);
 
 
   return (
