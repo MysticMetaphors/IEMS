@@ -150,7 +150,8 @@ export function buildSeedData(now: Date = new Date()) {
 }
 
 /**
- * Deletes ALL local data and fills the database with the development seed data.
+ * Deletes all teaching data and fills the database with the development seed data.
+ * The local account and sign-in are kept.
  * Development only: refuses to run in a production build.
  */
 export async function seedDatabase() {
@@ -160,7 +161,7 @@ export async function seedDatabase() {
 
   // Start from an empty database so the seed never collides with existing rows
   // (custom ids are unique) and running it twice gives the same result.
-  await resetDatabase();
+  await resetDatabase({ keepAccount: true });
 
   const db = await getDatabase();
   const now = new Date();

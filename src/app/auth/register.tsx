@@ -1,16 +1,50 @@
-import CloseEye from "@/assets/icons/auth/eye-closed.svg";
-import OpenEye from "@/assets/icons/auth/eye-open.svg";
+import AuthField from "@/components/auth/auth-field";
+import SocialSignIn from "@/components/auth/social-sign-in";
+import { useAuth } from "@/lib/auth/auth-context";
+import { passwordStrength, RegistrationInput, validateRegistration } from "@/lib/auth/validation";
+import { errorMessage } from "@/lib/utils/error-message";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { KeyboardAvoidingView, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 export default function Register() {
   const { height } = useWindowDimensions();
-  const [show, setShow] = useState(false)
+  const { register } = useAuth();
+  const [values, setValues] = useState<RegistrationInput>({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [errors, setErrors] = useState<ReturnType<typeof validateRegistration>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const strength = passwordStrength(values.password);
+  const setValue = (key: keyof RegistrationInput) => (text: string) =>
+    setValues((current) => ({ ...current, [key]: text }));
+
+  async function handleSubmit() {
+    if (submitting) return;
+
+    const nextErrors = validateRegistration(values);
+    setErrors(nextErrors);
+    setFormError(null);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setSubmitting(true);
+    try {
+      // On success the route guard leaves this screen.
+      await register(values);
+    } catch (error) {
+      setFormError(errorMessage(error));
+      setSubmitting(false);
+    }
+  }
 
   return (
-    <View className="flex flex-col flex-1">
+    <KeyboardAvoidingView behavior="padding" className="flex flex-col flex-1">
       <View className="items-center justify-center" style={{ height: height * 0.4 }}>
         <Image
           source={require("@/assets/images/login.png")}
@@ -37,80 +71,92 @@ export default function Register() {
         </View>
 
         <View className="flex flex-row gap-[15px] w-full">
-          <View className="flex-1 gap-[4px]">
-            <Text className="text-[14px] text-text">Name</Text>
-            <View className="w-fit flex-row px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-              <Text className="text-[14px] text-[#ABABAB]">Your name</Text>
-            </View>
+          <View className="flex-1">
+            <AuthField
+              label="Name"
+              placeholder="Your name"
+              value={values.name}
+              onChangeText={setValue("name")}
+              error={errors.name}
+              autoComplete="name"
+              textContentType="name"
+            />
           </View>
 
-          <View className="flex-1 gap-[4px]">
-            <Text className="text-[14px] text-text">Email</Text>
-            <View className="w-fit flex-row px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-              <Text className="text-[14px] text-[#ABABAB]">you@example..</Text>
-            </View>
+          <View className="flex-1">
+            <AuthField
+              label="Email"
+              placeholder="you@example.."
+              value={values.email}
+              onChangeText={setValue("email")}
+              error={errors.email}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+            />
           </View>
         </View>
 
-        <View className="flex gap-[4px]">
-          <View className="flex flex-row justify-between">
-            <Text className="text-[14px] text-text">Password</Text>
-          </View>
-          <View className="flex flex-row justify-between px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-            <Text className="text-[14px] text-[#ABABAB]">
-              {show ? "Hsdi*3n40dn" : "••••••••"}
-            </Text>
-
-            <Pressable onPress={() => setShow(!show)}>
-              {show ? <OpenEye /> : <CloseEye />}
-            </Pressable>
-          </View>
-          <View className="py-[2px] flex flex-row gap-[2px] w-full">
-            <View className="flex-1 opacity-70 bg-[#24C911] rounded-full h-[7px]" />
-            <View className="flex-1 opacity-70 bg-[#24C911] rounded-full h-[7px]" />
-            <View className="flex-1 opacity-70 bg-[#24C911] rounded-full h-[7px]" />
-            <View className="flex-1 opacity-70 bg-muted rounded-full h-[7px]" />
-          </View>
-        </View>
-
-        <View className="flex gap-[4px]">
-          <View className="flex flex-row justify-between">
-            <Text className="text-[14px] text-text">Confirm Password</Text>
-          </View>
-          <View className="flex flex-row justify-between px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-            <Text className="text-[14px] text-[#ABABAB]">
-              {show ? "Hsdi*3n40dn" : "••••••••"}
-            </Text>
-
-            <Pressable onPress={() => setShow(!show)}>
-              {show ? <OpenEye /> : <CloseEye />}
-            </Pressable>
+        <View className="gap-[4px]">
+          <AuthField
+            label="Password"
+            placeholder="At least 8 characters"
+            password
+            value={values.password}
+            onChangeText={setValue("password")}
+            error={errors.password}
+            autoComplete="new-password"
+            textContentType="newPassword"
+          />
+          <View
+            className="py-[2px] flex flex-row gap-[2px] w-full"
+            accessible
+            accessibilityLabel={`Password strength ${strength} of 4`}
+          >
+            {[1, 2, 3, 4].map((level) => (
+              <View
+                key={level}
+                className={`flex-1 opacity-70 rounded-full h-[7px] ${level <= strength ? "bg-[#24C911]" : "bg-muted"}`}
+              />
+            ))}
           </View>
         </View>
 
-        <Pressable className="px-[18px] py-[16px] rounded-[12px] bg-foreground">
-          <Text className="text-[14px] text-white font-semibold text-center">Sign-Up</Text>
+        <AuthField
+          label="Confirm Password"
+          placeholder="Repeat your password"
+          password
+          value={values.confirmPassword}
+          onChangeText={setValue("confirmPassword")}
+          error={errors.confirmPassword}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          returnKeyType="go"
+          onSubmitEditing={handleSubmit}
+        />
+
+        <Text className="text-[12px] text-text">
+          Your account is stored only on this device. A forgotten password can&apos;t be recovered.
+        </Text>
+
+        {formError && (
+          <Text accessibilityRole="alert" className="text-[12px] text-[#D92D20]">{formError}</Text>
+        )}
+
+        <Pressable
+          onPress={handleSubmit}
+          disabled={submitting}
+          accessibilityRole="button"
+          className={`px-[18px] py-[16px] rounded-[12px] bg-foreground ${submitting ? "opacity-60" : ""}`}
+        >
+          <Text className="text-[14px] text-white font-semibold text-center">
+            {submitting ? "Creating account..." : "Sign-Up"}
+          </Text>
         </Pressable>
 
-        <View className="flex-row items-center gap-[16px]">
-          <View className="bg-muted flex-1 h-[0.5px]" />
-          <Text className="text-foreground text-[14px] text-center">
-            or continue with
-          </Text>
-          <View className="bg-muted flex-1 h-[0.5px]" />
-        </View>
-
-        <View className="flex flex-row gap-[16px]">
-          <View className="flex-1 flex-row items-center justify-center gap-[10px] px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-            <Image source={require("@/assets/google.png")} style={{ height: 24, width: 24 }} />
-            <Text className="text-foreground text-[14px] font-semibold">Google</Text>
-          </View>
-
-          <View className="flex-1 flex-row items-center justify-center gap-[10px] px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-            <Image source={require("@/assets/apple.png")} style={{ height: 24, width: 24 }} />
-            <Text className="text-foreground text-[14px] font-semibold">Apple</Text>
-          </View>
-        </View>
+        <SocialSignIn />
 
         <View className="flex-row justify-center gap-[4px]">
           <Text className="text-[14px] text-text">Already have account?</Text>
@@ -119,6 +165,6 @@ export default function Register() {
 
         <View className="h-[10px]" />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   )
 }

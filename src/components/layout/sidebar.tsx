@@ -8,10 +8,13 @@ import Scheduling from "@/assets/icons/sidebar/scheduling.svg";
 import Settings from "@/assets/icons/sidebar/settings.svg";
 import Sparkle from "@/assets/icons/sidebar/sparkle.svg";
 import Students from "@/assets/icons/sidebar/students.svg";
+import { useAuth } from "@/lib/auth/auth-context";
+import { errorMessage } from "@/lib/utils/error-message";
 import { usePathname, useRouter } from "expo-router";
 
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -96,6 +99,7 @@ const SidebarMenuItem = memo(function SidebarMenuItem({
 function Sidebar({ visible, onClose }: SidebarProps) {
   const [mounted, setMounted] = useState(visible);
   const router = useRouter();
+  const { state, signOut } = useAuth();
 
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
 
@@ -135,6 +139,11 @@ function Sidebar({ visible, onClose }: SidebarProps) {
     onClose();
     router.replace("/assistant");
   }, [onClose, router]);
+
+  const handleLogout = useCallback(() => {
+    // The route guard takes the user to the sign-in screen once signed out.
+    signOut().catch((error) => Alert.alert("Logout failed", errorMessage(error)));
+  }, [signOut]);
 
   // Bail out before touching the menu list at all while the drawer is
   // closed/animating away - no leaf items mount, so there's nothing to
@@ -182,7 +191,7 @@ function Sidebar({ visible, onClose }: SidebarProps) {
 
             <View className="ml-3">
               <Text className="font-inter text-[13px] font-semibold text-foreground">
-                Hunter Ramos
+                {state?.user?.name}
               </Text>
 
               <Text className="font-inter text-[10px] font-normal text-muted">
@@ -241,7 +250,10 @@ function Sidebar({ visible, onClose }: SidebarProps) {
               </Text>
             </Pressable>
 
-            <Pressable className="flex w-full flex-row items-center gap-[4px] rounded-[12px] border border-border bg-card p-[17px]">
+            <Pressable
+              onPress={handleLogout}
+              accessibilityRole="button"
+              className="flex w-full flex-row items-center gap-[4px] rounded-[12px] border border-border bg-card p-[17px]">
               <Logout
                 height={19}
                 width={19}

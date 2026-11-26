@@ -1,16 +1,44 @@
-import CloseEye from "@/assets/icons/auth/eye-closed.svg";
-import OpenEye from "@/assets/icons/auth/eye-open.svg";
+import AuthField from "@/components/auth/auth-field";
+import SocialSignIn from "@/components/auth/social-sign-in";
+import { useAuth } from "@/lib/auth/auth-context";
+import { validateSignIn } from "@/lib/auth/validation";
+import { errorMessage } from "@/lib/utils/error-message";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
-import { useState } from "react";
-import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { useRef, useState } from "react";
+import { KeyboardAvoidingView, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 
 export default function Login() {
   const { height } = useWindowDimensions();
-  const [show, setShow] = useState(false)
+  const { signIn, state } = useAuth();
+  const passwordRef = useRef<TextInput>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<ReturnType<typeof validateSignIn>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit() {
+    if (submitting) return;
+
+    const nextErrors = validateSignIn({ email, password });
+    setErrors(nextErrors);
+    setFormError(null);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setSubmitting(true);
+    try {
+      // On success the route guard leaves this screen.
+      await signIn(email, password);
+    } catch (error) {
+      setFormError(errorMessage(error));
+      setSubmitting(false);
+    }
+  }
 
   return (
-    <View className="flex flex-col flex-1">
+    <KeyboardAvoidingView behavior="padding" className="flex flex-col flex-1">
       <View className="items-center justify-center" style={{ height: height * 0.4 }}>
         <Image
           source={require("@/assets/images/login.png")}
@@ -36,60 +64,71 @@ export default function Login() {
           <Text className="text-[14px] text-text">Sign-in to your account</Text>
         </View>
 
-        <View className="flex gap-[4px]">
-          <Text className="text-[14px] text-text">Email</Text>
-          <View className="flex flex-row justify-between px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-            <Text className="text-[14px] text-[#ABABAB]">you@example.com</Text>
-          </View>
-        </View>
-        <View className="flex gap-[4px]">
-          <View className="flex flex-row justify-between">
-            <Text className="text-[14px] text-text">Password</Text>
-            <Link href="/auth/forgot-password" className="text-[14px] text-text underline">Forgot password?</Link>
-          </View>
-          <View className="flex flex-row justify-between px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-            <Text className="text-[14px] text-[#ABABAB]">
-              {show ? "Hsdi*3n40dn" : "••••••••"}
-            </Text>
+        <AuthField
+          label="Email"
+          placeholder="you@example.com"
+          value={email}
+          onChangeText={setEmail}
+          error={errors.email}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
+          textContentType="emailAddress"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+        />
 
-            <Pressable onPress={() => setShow(!show)}>
-              {show ? <OpenEye /> : <CloseEye />}
+        <AuthField
+          ref={passwordRef}
+          label="Password"
+          placeholder="Your password"
+          password
+          value={password}
+          onChangeText={setPassword}
+          error={errors.password}
+          autoComplete="current-password"
+          textContentType="password"
+          returnKeyType="go"
+          onSubmitEditing={handleSubmit}
+          labelAction={
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setNotice("Password reset isn't available: your account is stored only on this device.")}
+            >
+              <Text className="text-[14px] text-text underline">Forgot password?</Text>
             </Pressable>
-          </View>
+          }
+        />
 
-        </View>
+        {notice && <Text className="text-[12px] text-text">{notice}</Text>}
+        {formError && (
+          <Text accessibilityRole="alert" className="text-[12px] text-[#D92D20]">{formError}</Text>
+        )}
 
-        <Link href="/(dashboard)/overview" className="px-[18px] py-[16px] rounded-[12px] bg-foreground">
-          <Text className="text-[14px] text-white font-semibold text-center">Sign-in</Text>
-        </Link>
-
-        <View className="flex-row items-center gap-[16px]">
-          <View className="bg-muted flex-1 h-[0.5px]" />
-          <Text className="text-foreground text-[14px] text-center">
-            or continue with
+        <Pressable
+          onPress={handleSubmit}
+          disabled={submitting}
+          accessibilityRole="button"
+          className={`px-[18px] py-[16px] rounded-[12px] bg-foreground ${submitting ? "opacity-60" : ""}`}
+        >
+          <Text className="text-[14px] text-white font-semibold text-center">
+            {submitting ? "Signing in..." : "Sign-in"}
           </Text>
-          <View className="bg-muted flex-1 h-[0.5px]" />
-        </View>
+        </Pressable>
 
-        <View className="flex flex-row gap-[16px]">
-          <View className="flex-1 flex-row items-center justify-center gap-[10px] px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-            <Image source={require("@/assets/google.png")} style={{ height: 24, width: 24 }} />
-            <Text className="text-foreground text-[14px] font-semibold">Google</Text>
+        <SocialSignIn />
+
+        {!state?.hasAccount && (
+          <View className="flex-row justify-center gap-[4px]">
+            <Text className="text-[14px] text-text">Don&apos;t have an account?</Text>
+            <Link href="/auth/register" className="text-[14px] text-foreground font-semibold underline">Sign-up</Link>
           </View>
-
-          <View className="flex-1 flex-row items-center justify-center gap-[10px] px-[18px] py-[16px] rounded-[12px] border border-border bg-[#E9E9E9]">
-            <Image source={require("@/assets/apple.png")} style={{ height: 24, width: 24 }} />
-            <Text className="text-foreground text-[14px] font-semibold">Apple</Text>
-          </View>
-        </View>
-
-        <View className="flex-row justify-center gap-[4px]">
-          <Text className="text-[14px] text-text">Don&apos;t have an account?</Text>
-          <Link href="/auth/register" className="text-[14px] text-foreground font-semibold underline">Sign-up</Link>
-        </View>
+        )}
 
         <View className="h-[10px]" />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
