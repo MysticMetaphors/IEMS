@@ -9,3 +9,9 @@ declare module '*.svg' {
   const content: React.StatelessComponent<SvgProps>;
   export default content;
 }
+
+// CSS modules are only used by the web build
+declare module "*.module.css" {
+  const classes: Record<string, string>;
+  export default classes;
+}

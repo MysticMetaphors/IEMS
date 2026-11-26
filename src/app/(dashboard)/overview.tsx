@@ -215,7 +215,7 @@ export default function Overview() {
 
         {/* Today's classes */}
         <View className="flex flex-row items-center justify-between h-fit w-full">
-          <Text className="font-inter-semibold text-[12px]">Today's Classes {" "}
+          <Text className="font-inter-semibold text-[12px]">Today&apos;s Classes {" "}
             {loading ? null : (
               <Text className="font-inter text-[12px] text-muted">({todaySessions.length})</Text>
             )}
