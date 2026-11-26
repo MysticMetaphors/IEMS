@@ -12,6 +12,7 @@
     "db:seed": "adb shell am start -a android.intent.action.VIEW -d \"iems://db/seed-local?confirm=seed\" -p com.iems"
   },
   "dependencies": {
+    "@expo-google-fonts/instrument-serif": "^0.4.1",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo-google-fonts/oleo-script-swash-caps": "^0.4.1",
     "@react-native-community/datetimepicker": "8.6.0",
