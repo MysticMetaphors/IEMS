@@ -235,7 +235,7 @@ export default function Classes() {
             <Text className="font-inter-semibold text-foreground">
               {deleteState.item?.name ?? "this class"}
             </Text>
-            ? Its student enrollments will be removed too. This can't be undone.
+            ? Its student enrollments will be removed too. This can&apos;t be undone.
           </Text>
 
           {deleteError ? (

@@ -84,7 +84,7 @@ export default function Login() {
         </View>
 
         <View className="flex-row justify-center gap-[4px]">
-          <Text className="text-[14px] text-text">Don't have an account?</Text>
+          <Text className="text-[14px] text-text">Don&apos;t have an account?</Text>
           <Link href="/auth/register" className="text-[14px] text-foreground font-semibold underline">Sign-up</Link>
         </View>
 
