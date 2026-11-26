@@ -57,7 +57,7 @@ const NavItem = memo(function NavItem({ label, route, icon: Icon }: MenuItem) {
       <Icon
         height={24}
         width={24}
-        style={{ color: active ? "#FFFFFF" : "#656565" }}
+        color={active ? "#FFFFFF" : "#656565"}
       />
     </Pressable>
   );

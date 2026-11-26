@@ -261,7 +261,7 @@ export default function Students() {
             <Text className="font-inter-semibold text-foreground">
               {deleteState.item?.name ?? "this student"}
             </Text>
-            ? This can't be undone.
+            ? This can&apos;t be undone.
           </Text>
 
           {deleteError ? (

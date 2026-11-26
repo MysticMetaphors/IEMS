@@ -19,6 +19,7 @@ import {
   ScrollView,
   Text,
   View,
+  type PressableStateCallbackType,
 } from "react-native";
 import type { SvgProps } from "react-native-svg";
 
@@ -64,7 +65,7 @@ const SidebarMenuItem = memo(function SidebarMenuItem({
 
   return (
     <Pressable onPress={handlePress} className="w-full">
-      {({ hovered }) => {
+      {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => {
         const highlighted = active || hovered;
 
         return (
@@ -76,7 +77,7 @@ const SidebarMenuItem = memo(function SidebarMenuItem({
             <Icon
               height={19}
               width={19}
-              style={{ color: highlighted ? "#FFFFFF" : "#8E8E8E" }}
+              color={highlighted ? "#FFFFFF" : "#8E8E8E"}
             />
             <Text
               className={`font-inter-semibold text-[12px] ${
